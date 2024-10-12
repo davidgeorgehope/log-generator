@@ -27,6 +27,7 @@ public class LogGeneratorUtils {
             "/api/inventory/check", "/api/recommendations", "/api/reviews/{productId}"
     };
     public static final String anomalousHighRequestIP = "192.0.2.1"; // Reserved IP for documentation
+    private static final Random RANDOM = new Random();
 
     static {
         ipToCountryMap.put("72.57.0.53", "IN"); // India
@@ -204,23 +205,13 @@ public class LogGeneratorUtils {
     }
 
     public static int getLogsToGenerate() {
-        LocalTime now = LocalTime.now();
-        int hour = now.getHour();
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-
+        double meanRequestsPerSecond = 50; // Normal mean request rate
         if (AnomalyConfig.isInduceHighVisitorRate()) {
-            // Simulate unusually high traffic
-            return random.nextInt(50) + 50; // 50-100 logs per second
+            meanRequestsPerSecond = 500; // Increase mean request rate during high visitor rate anomaly
+        } else if (AnomalyConfig.isInduceLowRequestRate()) {
+            meanRequestsPerSecond = 5; // Decrease mean request rate during low request rate anomaly
         }
-
-        // Simulate higher traffic during business hours
-        if (hour >= 9 && hour < 17) {
-            return random.nextInt(11) + 10; // 10-20 logs per second
-        } else if ((hour >= 7 && hour < 9) || (hour >= 17 && hour < 20)) {
-            return random.nextInt(6) + 5; // 5-10 logs per second
-        } else {
-            return random.nextInt(3) + 1; // 1-3 logs per second
-        }
+        return (int) Math.round(-Math.log(1 - RANDOM.nextDouble()) * meanRequestsPerSecond);
     }
 
     public static String getRandomErrorMessage(boolean isFrontend, String url) {

@@ -2,6 +2,7 @@ package org.davidgeorgehope;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Random;
 
 import java.io.File;
 import java.util.concurrent.*;
@@ -13,16 +14,16 @@ public class NginxLogGenerator {
         String frontendLogDir = "logs/frontend";
         String backendLogDir = "logs/backend";
 
-        // Load anomaly configuration from environment variables
-        loadAnomalyConfig();
-
         // Create directories if they don't exist
         new File(frontendLogDir).mkdirs();
         new File(backendLogDir).mkdirs();
 
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(4);
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(5);
 
         UserSessionManager userSessionManager = new UserSessionManager();
+
+        // Start the random scheduling of anomaly configuration updates
+        scheduleAnomalyConfigUpdate(executor);
 
         // Generate frontend access logs continuously
         executor.scheduleAtFixedRate(() -> {
@@ -70,10 +71,48 @@ public class NginxLogGenerator {
         }));
     }
 
-    private static void loadAnomalyConfig() {
-        AnomalyConfig.setInduceHighVisitorRate(Boolean.parseBoolean(System.getenv("INDUCE_HIGH_VISITOR_RATE")));
-        AnomalyConfig.setInduceHighErrorRate(Boolean.parseBoolean(System.getenv("INDUCE_HIGH_ERROR_RATE")));
-        AnomalyConfig.setInduceHighRequestRateFromSingleIP(Boolean.parseBoolean(System.getenv("INDUCE_HIGH_REQUEST_RATE_FROM_SINGLE_IP")));
-        AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(Boolean.parseBoolean(System.getenv("INDUCE_HIGH_DISTINCT_URLS_FROM_SINGLE_IP")));
+    private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
+        Random random = new Random();
+        int minDelay = 3000; // Minimum delay in seconds
+        int maxDelay = 6000; // Maximum delay in seconds
+        int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay; // Random delay between 30 and 60 seconds
+
+        executor.schedule(() -> {
+            updateAnomalyConfig();
+            scheduleAnomalyConfigUpdate(executor); // Reschedule after execution
+        }, delay, TimeUnit.SECONDS);
+    }
+
+    private static void updateAnomalyConfig() {
+        // Randomly set anomalies in a complementary pattern
+        Random random = new Random();
+        int anomalyType = random.nextInt(5); // Assuming 5 possible anomalies
+
+        // Reset all anomalies
+        AnomalyConfig.setInduceHighVisitorRate(false);
+        AnomalyConfig.setInduceHighErrorRate(false);
+        AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
+        AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
+        AnomalyConfig.setInduceLowRequestRate(false);
+
+        switch (anomalyType) {
+            case 0:
+                AnomalyConfig.setInduceHighVisitorRate(true);
+                break;
+            case 1:
+                AnomalyConfig.setInduceHighErrorRate(true);
+                break;
+            case 2:
+                AnomalyConfig.setInduceHighRequestRateFromSingleIP(true);
+                break;
+            case 3:
+                AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(true);
+                break;
+            case 4:
+                AnomalyConfig.setInduceLowRequestRate(true);
+                break;
+        }
+        logger.info("Anomaly configuration updated: HighVisitorRate={}, HighErrorRate={}, HighRequestRateFromSingleIP={}, HighDistinctURLsFromSingleIP={}, LowRequestRate={}",
+                AnomalyConfig.isInduceHighVisitorRate(), AnomalyConfig.isInduceHighErrorRate(), AnomalyConfig.isInduceHighRequestRateFromSingleIP(), AnomalyConfig.isInduceHighDistinctURLsFromSingleIP(), AnomalyConfig.isInduceLowRequestRate());
     }
 }
