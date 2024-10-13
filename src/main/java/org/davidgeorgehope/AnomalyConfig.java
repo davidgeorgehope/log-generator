@@ -6,6 +6,7 @@ public class AnomalyConfig {
     private static boolean induceHighRequestRateFromSingleIP = false;
     private static boolean induceHighDistinctURLsFromSingleIP = false;
     private static boolean induceLowRequestRate = false;
+    private static boolean induceDatabaseOutage = false; // New anomaly flag
     
     // Getters and Setters
     public static boolean isInduceHighVisitorRate() {
@@ -46,5 +47,13 @@ public class AnomalyConfig {
 
     public static void setInduceLowRequestRate(boolean value) {
         induceLowRequestRate = value;
+    }
+
+    public static boolean isInduceDatabaseOutage() {
+        return induceDatabaseOutage;
+    }
+
+    public static void setInduceDatabaseOutage(boolean induceDatabaseOutage) {
+        AnomalyConfig.induceDatabaseOutage = induceDatabaseOutage;
     }
 }

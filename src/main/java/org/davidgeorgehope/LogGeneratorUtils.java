@@ -141,6 +141,11 @@ public class LogGeneratorUtils {
     public static int getStatusCode(String ip, boolean isAnomalous) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
+        if (AnomalyConfig.isInduceDatabaseOutage()) {
+            // Force 100% 500 Internal Server Errors
+            return 500;
+        }
+
         if (AnomalyConfig.isInduceHighErrorRate()) {
             // Increase the chance of errors
             if (random.nextInt(100) < 70) { // 70% chance of error
@@ -262,5 +267,61 @@ public class LogGeneratorUtils {
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
         return list.get(random.nextInt(list.size()));
+    }
+
+    public static String getRandomMySQLErrorMessage(int errorCode) {
+        Map<Integer, String[]> errorMessages = new HashMap<>();
+        errorMessages.put(1045, new String[]{
+                "Access denied for user 'ecommerce_user'@'localhost' (using password: YES)",
+                "Access denied for user 'shop_admin'@'localhost' (using password: NO)"
+        });
+        errorMessages.put(1146, new String[]{
+                "Table 'ecommerce_db.products' doesn't exist",
+                "Table 'ecommerce_db.orders' doesn't exist"
+        });
+        errorMessages.put(2003, new String[]{
+                "Can't connect to MySQL server on 'db.ecommerce.com' (10061)",
+                "Can't connect to MySQL server on '192.168.1.100' (111)"
+        });
+        errorMessages.put(1064, new String[]{
+                "You have an error in your SQL syntax; check the manual near 'SELECT * FROM products WHERE category = Electronics'",
+                "Syntax error near 'INSERT INTO orders (customer_id, product_id, quantity) VALUE'"
+        });
+        errorMessages.put(1054, new String[]{
+                "Unknown column 'discount_price' in 'field list'",
+                "Unknown column 'customer_email' in 'where clause'"
+        });
+
+        String[] messages = errorMessages.getOrDefault(errorCode, new String[]{"An unknown error occurred"});
+        return getRandomElement(messages);
+    }
+
+    public static String getRandomSlowQuerySQL() {
+        String[] sqlQueries = {
+                "SELECT * FROM orders WHERE customer_id = {id}",
+                "UPDATE products SET stock = stock - 1 WHERE product_id = {id}",
+                "INSERT INTO user_sessions (session_id, user_id) VALUES ('{session}', {id})",
+                "DELETE FROM carts WHERE created_at < NOW() - INTERVAL 30 DAY",
+                "SELECT p.* FROM products p JOIN categories c ON p.category_id = c.id WHERE c.name = '{category}'"
+        };
+
+        String sql = getRandomElement(sqlQueries);
+        sql = replaceSQLPlaceholders(sql);
+        return sql;
+    }
+
+    private static String replaceSQLPlaceholders(String sql) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+
+        if (sql.contains("{id}")) {
+            sql = sql.replace("{id}", String.valueOf(random.nextInt(1, 10000)));
+        }
+        if (sql.contains("{session}")) {
+            sql = sql.replace("{session}", generateRandomString(32));
+        }
+        if (sql.contains("{category}")) {
+            sql = sql.replace("{category}", getRandomElement(new String[]{"Electronics", "Books", "Clothing", "Home & Garden"}));
+        }
+        return sql;
     }
 }

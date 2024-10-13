@@ -1,0 +1,33 @@
+2024-10-13 10:56:18.738791	3634	Query	UPDATE products SET stock = stock - 1 WHERE product_id = 6394
+2024-10-13 10:56:23.735339	4453	Quit	
+2024-10-13 10:56:28.733320	1517	Query	DELETE FROM carts WHERE created_at < NOW() - INTERVAL 30 DAY
+2024-10-13 10:56:33.733772	4428	Connect	User@Host: root[root] @ 126.232.10.93 []
+2024-10-13 10:56:38.732465	2316	Query	INSERT INTO user_sessions (session_id, user_id) VALUES ('pbQjKwMoA5ruz90bnlEfTys7EqqdOSyf', 4561)
+2024-10-13 10:56:43.735219	2358	Connect	User@Host: root[root] @ 72.57.0.53 []
+2024-10-13 10:56:48.733490	4651	Quit	
+2024-10-13 10:56:53.735907	3447	Quit	
+2024-10-13 10:56:58.733600	2423	Query	SELECT * FROM orders WHERE customer_id = 6609
+2024-10-13 10:57:03.735096	3989	Query	INSERT INTO user_sessions (session_id, user_id) VALUES ('z1d1t5DmCYhNnUNlsCNRqvH482vvE9Re', 3397)
+2024-10-13 10:57:08.733928	4880	Query	INSERT INTO user_sessions (session_id, user_id) VALUES ('ipBWXyNsoruqamfMRwBtfuuID8qe29iG', 5175)
+2024-10-13 10:57:13.736181	2955	Query	INSERT INTO user_sessions (session_id, user_id) VALUES ('YhvZhgdWUq4Qrp5voXvtq3uqrVfeE5yB', 3308)
+2024-10-13 10:57:18.735742	4387	Quit	
+2024-10-13 10:57:23.736099	2056	Query	DELETE FROM carts WHERE created_at < NOW() - INTERVAL 30 DAY
+2024-10-13 10:57:28.732765	1160	Connect	User@Host: root[root] @ 177.71.39.140 []
+2024-10-13 10:57:33.737020	2731	Quit	
+2024-10-13 10:57:38.735259	4451	Connect	User@Host: app_user[app_user] @ 33.248.163.191 []
+2024-10-13 10:57:43.732611	4103	Connect	User@Host: root[root] @ 228.172.131.42 []
+2024-10-13 10:57:48.737279	4740	Connect	User@Host: app_user[app_user] @ 133.104.25.0 []
+2024-10-13 10:57:53.735270	3007	Connect	User@Host: app_user[app_user] @ 52.61.219.220 []
+2024-10-13 10:57:58.736895	3982	Query	SELECT * FROM orders WHERE customer_id = 6001
+2024-10-13 10:58:03.732776	4973	Query	DELETE FROM carts WHERE created_at < NOW() - INTERVAL 30 DAY
+2024-10-13 10:58:08.733263	3964	Connect	User@Host: db_user[db_user] @ 166.176.2.106 []
+2024-10-13 10:58:13.732440	2158	Query	DELETE FROM carts WHERE created_at < NOW() - INTERVAL 30 DAY
+2024-10-13 10:58:18.735198	3772	Connect	User@Host: root[root] @ 173.184.13.197 []
+2024-10-13 10:58:23.735197	3215	Quit	
+2024-10-13 10:58:28.733316	1022	Quit	
+2024-10-13 10:58:33.736273	4345	Quit	
+2024-10-13 10:58:38.735056	1948	Connect	User@Host: root[root] @ 26.73.32.236 []
+2024-10-13 10:58:43.735963	4607	Quit	
+2024-10-13 10:58:48.732859	2622	Connect	User@Host: db_user[db_user] @ 229.149.248.62 []
+2024-10-13 10:58:53.735588	3900	Quit	
+2024-10-13 10:58:58.739755	3451	Connect	User@Host: root[root] @ 65.84.14.182 []

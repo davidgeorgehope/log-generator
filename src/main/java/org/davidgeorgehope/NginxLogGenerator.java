@@ -14,6 +14,10 @@ public class NginxLogGenerator {
         String frontendLogDir = "logs/frontend";
         String backendLogDir = "logs/backend";
 
+        String mysqlLogDir = "logs/mysql";
+        new File(mysqlLogDir).mkdirs();
+
+
         // Create directories if they don't exist
         new File(frontendLogDir).mkdirs();
         new File(backendLogDir).mkdirs();
@@ -36,6 +40,22 @@ public class NginxLogGenerator {
             int logsToGenerate = LogGeneratorUtils.getLogsToGenerate();
             AccessLogGenerator.generateAccessLogs(logsToGenerate, backendLogDir + "/access.log", false, userSessionManager);
         }, 0, 1, TimeUnit.SECONDS);
+
+
+        // Generate MySQL error logs at a fixed rate
+        executor.scheduleAtFixedRate(() -> {
+            MySQLErrorLogGenerator.generateErrorLogs(1, mysqlLogDir + "/mysql_error.log");
+        }, 0, 10, TimeUnit.SECONDS);
+
+        // Generate MySQL slow logs at a fixed rate
+        executor.scheduleAtFixedRate(() -> {
+            MySQLSlowLogGenerator.generateSlowLogs(1, mysqlLogDir + "/mysql_slow.log");
+        }, 0, 15, TimeUnit.SECONDS);
+
+        // Generate MySQL general logs at a fixed rate
+        executor.scheduleAtFixedRate(() -> {
+            MySQLGeneralLogGenerator.generateGeneralLogs(1, mysqlLogDir + "/mysql_general.log");
+        }, 0, 5, TimeUnit.SECONDS);
 
         // Generate frontend error logs less frequently
         executor.scheduleAtFixedRate(() -> {
@@ -75,7 +95,7 @@ public class NginxLogGenerator {
         Random random = new Random();
         int minDelay = 3000; // Minimum delay in seconds
         int maxDelay = 6000; // Maximum delay in seconds
-        int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay; // Random delay between 30 and 60 seconds
+        int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay; // Random delay between 3000 and 6000 seconds
 
         executor.schedule(() -> {
             updateAnomalyConfig();
@@ -86,7 +106,7 @@ public class NginxLogGenerator {
     private static void updateAnomalyConfig() {
         // Randomly set anomalies in a complementary pattern
         Random random = new Random();
-        int anomalyType = random.nextInt(5); // Assuming 5 possible anomalies
+        int anomalyType = random.nextInt(6); // Now 6 possible anomalies
 
         // Reset all anomalies
         AnomalyConfig.setInduceHighVisitorRate(false);
@@ -94,6 +114,7 @@ public class NginxLogGenerator {
         AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
         AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
         AnomalyConfig.setInduceLowRequestRate(false);
+        AnomalyConfig.setInduceDatabaseOutage(false);
 
         switch (anomalyType) {
             case 0:
@@ -111,8 +132,13 @@ public class NginxLogGenerator {
             case 4:
                 AnomalyConfig.setInduceLowRequestRate(true);
                 break;
+            case 5:
+                AnomalyConfig.setInduceDatabaseOutage(true); // New anomaly case
+                break;
         }
-        logger.info("Anomaly configuration updated: HighVisitorRate={}, HighErrorRate={}, HighRequestRateFromSingleIP={}, HighDistinctURLsFromSingleIP={}, LowRequestRate={}",
-                AnomalyConfig.isInduceHighVisitorRate(), AnomalyConfig.isInduceHighErrorRate(), AnomalyConfig.isInduceHighRequestRateFromSingleIP(), AnomalyConfig.isInduceHighDistinctURLsFromSingleIP(), AnomalyConfig.isInduceLowRequestRate());
+        logger.info("Anomaly configuration updated: HighVisitorRate={}, HighErrorRate={}, HighRequestRateFromSingleIP={}, HighDistinctURLsFromSingleIP={}, LowRequestRate={}, DatabaseOutage={}",
+                AnomalyConfig.isInduceHighVisitorRate(), AnomalyConfig.isInduceHighErrorRate(),
+                AnomalyConfig.isInduceHighRequestRateFromSingleIP(), AnomalyConfig.isInduceHighDistinctURLsFromSingleIP(),
+                AnomalyConfig.isInduceLowRequestRate(), AnomalyConfig.isInduceDatabaseOutage());
     }
 }
