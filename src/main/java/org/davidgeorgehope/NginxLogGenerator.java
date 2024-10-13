@@ -93,8 +93,9 @@ public class NginxLogGenerator {
 
     private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
         Random random = new Random();
-        int minDelay = 3000; // Minimum delay in seconds
-        int maxDelay = 6000; // Maximum delay in seconds
+
+        int minDelay = 1500; // 25 miuntes
+        int maxDelay = 3000; // 50 minutes
         int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay; // Random delay between 3000 and 6000 seconds
 
         executor.schedule(() -> {
