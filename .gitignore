@@ -42,4 +42,5 @@ application.properties
 application-*.properties
 
 # LinkedIn data file
-*_linkedin_data.txt
+t_linkedin_data.txt
+logs/
