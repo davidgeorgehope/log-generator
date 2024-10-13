@@ -5,14 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.FileWriter;
 import java.io.IOException;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class MySQLErrorLogGenerator {
     private static final Logger logger = LoggerFactory.getLogger(MySQLErrorLogGenerator.class);
-    private static final DateTimeFormatter ERROR_LOG_TIMESTAMP_FORMATTER =
-            DateTimeFormatter.ofPattern("yyMMdd HH:mm:ss");
 
     public static void generateErrorLogs(int logsCount, String filePath) {
         try (FileWriter writer = new FileWriter(filePath, true)) {
@@ -22,6 +17,7 @@ public class MySQLErrorLogGenerator {
                     // Generate outage-specific error logs
                     logEntry = MySQLErrorLogEntry.createOutageEntry().toString();
                 } else {
+                    // Generate non-outage logs with potential low storage warnings
                     logEntry = MySQLErrorLogEntry.createRandomEntry().toString();
                 }
                 writer.write(logEntry);

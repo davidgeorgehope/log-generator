@@ -8,40 +8,59 @@ public class MySQLErrorLogEntry {
     private static final DateTimeFormatter ERROR_LOG_TIMESTAMP_FORMATTER =
             DateTimeFormatter.ofPattern("yyMMdd HH:mm:ss");
 
-    private final String timestamp;
-    private final String errorLevel;
-    private final int errorCode;
-    private final String errorMessage;
+    private String timestamp;
+    private String message;
 
-    private MySQLErrorLogEntry(String timestamp, String errorLevel, int errorCode, String errorMessage) {
+    public MySQLErrorLogEntry(String timestamp, String message) {
         this.timestamp = timestamp;
-        this.errorLevel = errorLevel;
-        this.errorCode = errorCode;
-        this.errorMessage = errorMessage;
+        this.message = message;
     }
 
     public static MySQLErrorLogEntry createRandomEntry() {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        int entryType = random.nextInt(100);
+
+        if (entryType < 20) {
+            // 20% chance to generate a low storage warning
+            return createLowStorageWarningEntry();
+        } else {
+            // Other general log entries
+            return createGeneralLogEntry();
+        }
+    }
+
+    private static MySQLErrorLogEntry createLowStorageWarningEntry() {
         String timestamp = ZonedDateTime.now().format(ERROR_LOG_TIMESTAMP_FORMATTER);
-        String errorLevel = getRandomErrorLevel();
-        int errorCode = getRandomErrorCode();
-        String errorMessage = LogGeneratorUtils.getRandomMySQLErrorMessage(errorCode);
-
-        return new MySQLErrorLogEntry(timestamp, errorLevel, errorCode, errorMessage);
+        String[] tables = {"users", "orders", "products", "transactions"};
+        String table = tables[ThreadLocalRandom.current().nextInt(tables.length)];
+        String[] messages = {
+            "[Warning] Disk space for table '" + table + "' is running low",
+            "[Warning] Table '" + table + "' is approaching maximum row count",
+            "[Warning] Partition for table '" + table + "' is nearly full"
+        };
+        String message = messages[ThreadLocalRandom.current().nextInt(messages.length)];
+        return new MySQLErrorLogEntry(timestamp, message);
     }
 
-    private static String getRandomErrorLevel() {
-        String[] levels = {"ERROR", "WARNING", "NOTE"};
-        return LogGeneratorUtils.getRandomElement(levels);
-    }
-
-    private static int getRandomErrorCode() {
-        Integer[] errorCodes = {1045, 1146, 2003, 1064, 1054};
-        return LogGeneratorUtils.getRandomElement(errorCodes);
+    private static MySQLErrorLogEntry createGeneralLogEntry() {
+        String timestamp = ZonedDateTime.now().format(ERROR_LOG_TIMESTAMP_FORMATTER);
+        String[] messages = {
+            "[Note] Plugin 'FEDERATED' is disabled.",
+            "[Note] InnoDB: The InnoDB memory heap is disabled",
+            "[Note] InnoDB: Mutexes and rw_locks use GCC atomic builtins",
+            "[Note] InnoDB: Compressed tables use zlib 1.2.3",
+            "[Note] InnoDB: Using Linux native AIO",
+            "[Note] IPv6 is available.",
+            "[Note] Event Scheduler: Loaded 0 events",
+            "[Note] /usr/sbin/mysqld: ready for connections."
+        };
+        String message = messages[ThreadLocalRandom.current().nextInt(messages.length)];
+        return new MySQLErrorLogEntry(timestamp, message);
     }
 
     @Override
     public String toString() {
-        return String.format("%s [%s] [Code: %d] %s%n", timestamp, errorLevel, errorCode, errorMessage);
+        return timestamp + " " + message + System.lineSeparator();
     }
 
     public static MySQLErrorLogEntry createOutageEntry() {
@@ -50,6 +69,6 @@ public class MySQLErrorLogEntry {
         int errorCode = 1114; // Error code for ER_RECORD_FILE_FULL
         String errorMessage = "The table 'orders' is full";
 
-        return new MySQLErrorLogEntry(timestamp, errorLevel, errorCode, errorMessage);
+        return new MySQLErrorLogEntry(timestamp, errorMessage);
     }
 }
