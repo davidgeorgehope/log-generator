@@ -14,6 +14,8 @@ public class MySQLSlowLogGenerator {
             for (int i = 0; i < logsCount; i++) {
                 String logEntry = MySQLSlowLogEntry.createRandomEntry().toString();
                 writer.write(logEntry);
+                // Introduce a slight delay if desired
+                // Thread.sleep(50);
             }
         } catch (IOException e) {
             logger.error("Error writing MySQL slow log", e);

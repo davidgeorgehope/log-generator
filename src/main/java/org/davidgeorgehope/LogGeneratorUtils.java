@@ -1,5 +1,7 @@
 package org.davidgeorgehope;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -325,5 +327,21 @@ public class LogGeneratorUtils {
         return sql;
     }
 
-    
+    public static String getRandomElement(String[] array) {
+        return array[ThreadLocalRandom.current().nextInt(array.length)];
+    }
+
+
+
+    public static String generateRandomSessionId() {
+        // Generate a random session ID (alphanumeric string)
+        return java.util.UUID.randomUUID().toString().replaceAll("-", "");
+    }
+
+    public static double round(double value, int places) {
+        if (places < 0) throw new IllegalArgumentException();
+        BigDecimal bd = BigDecimal.valueOf(value);
+        bd = bd.setScale(places, RoundingMode.HALF_UP);
+        return bd.doubleValue();
+    }
 }
