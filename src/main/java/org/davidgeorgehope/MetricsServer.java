@@ -8,6 +8,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 
+// Import the AnomalyConfig class
+import org.davidgeorgehope.AnomalyConfig;
+
 public abstract class MetricsServer {
     protected final int port;
     protected int activeConnections = 0;
@@ -55,28 +58,50 @@ public abstract class MetricsServer {
     protected void updateMetrics() {
         ThreadLocalRandom rand = ThreadLocalRandom.current();
 
-        // Update reading, writing, and waiting
-        reading = rand.nextInt(1, 10);
-        writing = rand.nextInt(1, 50);
-        waiting = rand.nextInt(1, 100);
+        if (AnomalyConfig.isInduceDatabaseOutage()) {
+            // Simulate metrics during database outage
+            // Increase waiting connections due to stalled requests
+            reading = rand.nextInt(1, 5);
+            writing = rand.nextInt(1, 10);
+            waiting = rand.nextInt(100, 200); // Significantly increased waiting
 
-        // Active connections is the sum of reading, writing, and waiting
-        activeConnections = reading + writing + waiting;
+            // Active connections increase due to accumulation
+            activeConnections = reading + writing + waiting;
 
-        // Accepted and handled connections should not decrease
-        int newAccepted = rand.nextInt(50, 150);
-        acceptedConnections += newAccepted;
+            // Accepted connections continue normally
+            int newAccepted = rand.nextInt(50, 100);
+            acceptedConnections += newAccepted;
 
-        // Handled connections should be less than or equal to accepted connections
-        int newHandled = rand.nextInt(30, newAccepted);
-        handledConnections += newHandled;
+            // Handled connections decrease as processing stalls
+            int newHandled = rand.nextInt(10, 30);
+            handledConnections += newHandled;
 
-        // Requests should increase
-        requests += rand.nextInt(100, 300);
+            // Requests might increase due to retries or timeouts
+            requests += rand.nextInt(300, 500);
 
-        // Ensure handledConnections does not exceed acceptedConnections
-        if (handledConnections > acceptedConnections) {
-            handledConnections = acceptedConnections;
+            // Ensure handledConnections does not exceed acceptedConnections
+            if (handledConnections > acceptedConnections) {
+                handledConnections = acceptedConnections;
+            }
+        } else {
+            // Normal operation metrics update
+            reading = rand.nextInt(1, 10);
+            writing = rand.nextInt(1, 50);
+            waiting = rand.nextInt(1, 100);
+
+            activeConnections = reading + writing + waiting;
+
+            int newAccepted = rand.nextInt(50, 150);
+            acceptedConnections += newAccepted;
+
+            int newHandled = rand.nextInt(30, newAccepted);
+            handledConnections += newHandled;
+
+            requests += rand.nextInt(100, 300);
+
+            if (handledConnections > acceptedConnections) {
+                handledConnections = acceptedConnections;
+            }
         }
     }
 

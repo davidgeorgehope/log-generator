@@ -69,6 +69,31 @@ public class AccessLogEntry extends LogEntry {
                 referrer, userAgent, responseTime, countryCode, headers);
     }
 
+    public static AccessLogEntry createErrorEntry(boolean isFrontend, UserSessionManager userSessionManager) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+
+        String ip = LogGeneratorUtils.generateRandomIP(false);
+        String username = "-"; // Assuming no user is logged in during an error
+        String countryCode = LogGeneratorUtils.getCountryCode(ip);
+        String timestamp = ZonedDateTime.now().format(ACCESS_LOG_TIMESTAMP_FORMATTER);
+        HttpMethod method = LogGeneratorUtils.getRandomHttpMethod();
+        String url = LogGeneratorUtils.getRandomURL(username, isFrontend); // Use existing method
+        String protocol = "HTTP/1.1";
+        String request = method + " " + url + " " + protocol;
+        int status = 500; // Internal Server Error
+        int size = random.nextInt(500) + 100;
+        String referrer = "-"; // No referrer
+        String userAgent = LogGeneratorUtils.getRandomUserAgent();
+        double responseTime = LogGeneratorUtils.generateResponseTime();
+        List<String> headersList = LogGeneratorUtils.generateHeadersList(username);
+        String headers = headersList.stream()
+                .map(h -> "\"" + h + "\"")
+                .collect(Collectors.joining(" "));
+
+        return new AccessLogEntry(ip, username, timestamp, request, status, size,
+                referrer, userAgent, responseTime, countryCode, headers);
+    }
+
     @Override
     public String toString() {
         return String.format(ACCESS_LOG_TEMPLATE, ip, username, timestamp, request,

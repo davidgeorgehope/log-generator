@@ -3,21 +3,26 @@ package org.davidgeorgehope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 
 public class AccessLogGenerator {
     private static final Logger logger = LoggerFactory.getLogger(AccessLogGenerator.class);
 
-    public static void generateAccessLogs(int count, String fileName, boolean isFrontend, UserSessionManager userSessionManager) {
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(fileName, true))) {
-            for (int i = 0; i < count; i++) {
-                AccessLogEntry logEntry = AccessLogEntry.createRandomEntry(isFrontend, userSessionManager);
-                bw.write(logEntry.toString());
+    public static void generateAccessLogs(int logsCount, String filePath, boolean isFrontend, UserSessionManager userSessionManager) {
+        try (FileWriter writer = new FileWriter(filePath, true)) {
+            for (int i = 0; i < logsCount; i++) {
+                AccessLogEntry entry;
+                if (AnomalyConfig.isInduceDatabaseOutage()) {
+                    // Generate entries with 500 status codes
+                    entry = AccessLogEntry.createErrorEntry(isFrontend, userSessionManager);
+                } else {
+                    entry = AccessLogEntry.createRandomEntry(isFrontend, userSessionManager);
+                }
+                writer.write(entry.toString());
             }
         } catch (IOException e) {
-            logger.error("Error writing access logs to file: {}", fileName, e);
+            logger.error("Error writing access log", e);
         }
     }
 }
