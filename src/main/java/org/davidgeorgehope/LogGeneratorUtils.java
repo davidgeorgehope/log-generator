@@ -32,6 +32,12 @@ public class LogGeneratorUtils {
     private static final Random RANDOM = new Random();
     private static final List<String> ipPool = generateIpPool();
 
+    // First octets for USA IP ranges
+    private static final List<Integer> usaIpFirstOctets = List.of(3, 4, 12, 13, 17);
+
+    // First octets for Europe IP ranges
+    private static final List<Integer> europeIpFirstOctets = List.of(51, 77, 78, 79);
+
     static {
         ipToCountryMap.put("72.57.0.53", "IN"); // India
         // Add more mappings as needed
@@ -39,12 +45,34 @@ public class LogGeneratorUtils {
 
     private static List<String> generateIpPool() {
         List<String> ips = new ArrayList<>();
-        // Generate a list of 1000 unique IP addresses
-        for (int i = 0; i < 1000; i++) {
-            String ip = "192.168." + (i / 256) + "." + (i % 256);
+        
+        // Total number of IPs to generate
+        int totalIps = 1000;
+        
+        // Number of IPs per region
+        int ipsPerRegion = totalIps / 2;
+        
+        // Generate USA IPs
+        for (int i = 0; i < ipsPerRegion; i++) {
+            String ip = generateRandomIp(usaIpFirstOctets);
             ips.add(ip);
         }
+
+        // Generate Europe IPs
+        for (int i = 0; i < ipsPerRegion; i++) {
+            String ip = generateRandomIp(europeIpFirstOctets);
+            ips.add(ip);
+        }
+
         return ips;
+    }
+
+    private static String generateRandomIp(List<Integer> firstOctetPool) {
+        int firstOctet = firstOctetPool.get(RANDOM.nextInt(firstOctetPool.size()));
+        int secondOctet = RANDOM.nextInt(256);
+        int thirdOctet = RANDOM.nextInt(256);
+        int fourthOctet = RANDOM.nextInt(256);
+        return firstOctet + "." + secondOctet + "." + thirdOctet + "." + fourthOctet;
     }
 
     public static String generateRandomIP(boolean includeAnomalous) {
