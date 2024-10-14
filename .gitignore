@@ -43,4 +43,4 @@ application-*.properties
 
 # LinkedIn data file
 t_linkedin_data.txt
-logs/
+/logs/
