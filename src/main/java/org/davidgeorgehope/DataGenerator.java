@@ -167,11 +167,10 @@ public class DataGenerator {
         AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
         AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
         AnomalyConfig.setInduceLowRequestRate(false);
-        // Remove or comment out the following line
-        // AnomalyConfig.setInduceDatabaseOutage(false);
+        // AnomalyConfig.setInduceDatabaseOutage(false); // Now handled separately
 
-        // Reset the low storage warning count
-        MySQLErrorLogGenerator.resetLowStorageWarningCount();
+        // Removed from here
+        // MySQLErrorLogGenerator.resetLowStorageWarningCount();
 
         logger.info("Anomaly configuration reset to normal.");
     }

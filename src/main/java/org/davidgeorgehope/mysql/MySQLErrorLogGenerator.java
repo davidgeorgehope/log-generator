@@ -63,6 +63,9 @@ public class MySQLErrorLogGenerator {
         executor.schedule(() -> {
             AnomalyConfig.setInduceDatabaseOutage(false);
             logger.info("Database outage resolved.");
+
+            // Reset the low storage warning count here
+            resetLowStorageWarningCount();
         }, outageDuration, TimeUnit.SECONDS);
     }
 
