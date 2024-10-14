@@ -30,7 +30,7 @@ public class LogGeneratorUtils {
     };
     public static final String anomalousHighRequestIP = "192.0.2.1"; // Reserved IP for documentation
     private static final Random RANDOM = new Random();
-    private static final List<String> ipPool = generateIpPool();
+    private static List<String> ipPool;
 
     // First octets for USA IP ranges
     private static final List<Integer> usaIpFirstOctets = List.of(3, 4, 12, 13, 17);
@@ -84,12 +84,19 @@ public class LogGeneratorUtils {
                 return anomalousHighRequestIP;
             } else {
                 // Select a random IP from the pool
-                return ipPool.get(random.nextInt(ipPool.size()));
+                return getIpPool().get(random.nextInt(getIpPool().size()));
             }
         } else {
             // For normal operation, select a random IP from the pool
-            return ipPool.get(random.nextInt(ipPool.size()));
+            return getIpPool().get(random.nextInt(getIpPool().size()));
         }
+    }
+
+    public static synchronized List<String> getIpPool() {
+        if (ipPool == null) {
+            ipPool = generateIpPool();
+        }
+        return ipPool;
     }
 
     public static String getCountryCode(String ip) {
