@@ -67,8 +67,10 @@ public class MySQLErrorLogEntry {
         String timestamp = ZonedDateTime.now().format(ERROR_LOG_TIMESTAMP_FORMATTER);
         String errorLevel = "ERROR";
         int errorCode = 1114; // Error code for ER_RECORD_FILE_FULL
+        String sqlState = "HY000";
         String errorMessage = "The table 'orders' is full";
 
-        return new MySQLErrorLogEntry(timestamp, errorMessage);
+        String fullMessage = errorLevel + " " + errorCode + " (" + sqlState + "): " + errorMessage;
+        return new MySQLErrorLogEntry(timestamp, fullMessage);
     }
 }
