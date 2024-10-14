@@ -19,16 +19,15 @@ public class DataGenerator {
     private static final long applicationStartTime = System.currentTimeMillis();
 
     public static void main(String[] args) {
-        String frontendLogDir = "logs/frontend";
-        String backendLogDir = "logs/backend";
+        // Standard log directories
+        String nginxFrontEndLogDir = "/var/log/nginx_frontend";
+        String nginxBackendLogDir = "/var/log/nginx_backend";
+        String mysqlLogDir = "/var/log/mysql";
 
-        String mysqlLogDir = "logs/mysql";
+        // Create directories if they don't exist (requires appropriate permissions)
+        new File(nginxFrontEndLogDir).mkdirs();
+        new File(nginxBackendLogDir).mkdirs();
         new File(mysqlLogDir).mkdirs();
-
-
-        // Create directories if they don't exist
-        new File(frontendLogDir).mkdirs();
-        new File(backendLogDir).mkdirs();
 
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(5);
 
@@ -37,44 +36,68 @@ public class DataGenerator {
         // Start the random scheduling of anomaly configuration updates
         scheduleAnomalyConfigUpdate(executor);
 
-        // Generate frontend access logs continuously
+        // Generate Nginx access logs continuously for frontend and backend
         executor.scheduleAtFixedRate(() -> {
             int logsToGenerate = LogGeneratorUtils.getLogsToGenerate();
-            AccessLogGenerator.generateAccessLogs(logsToGenerate, frontendLogDir + "/access.log", true, userSessionManager);
+            AccessLogGenerator.generateAccessLogs(
+                logsToGenerate,
+                nginxFrontEndLogDir + "/access.log",
+                true,
+                userSessionManager
+            );
         }, 0, 1, TimeUnit.SECONDS);
 
-        // Generate backend access logs continuously
         executor.scheduleAtFixedRate(() -> {
             int logsToGenerate = LogGeneratorUtils.getLogsToGenerate();
-            AccessLogGenerator.generateAccessLogs(logsToGenerate, backendLogDir + "/access.log", false, userSessionManager);
+            AccessLogGenerator.generateAccessLogs(
+                logsToGenerate,
+                nginxBackendLogDir + "/access.log",
+                false,
+                userSessionManager
+            );
         }, 0, 1, TimeUnit.SECONDS);
 
-
-        // Generate MySQL error logs at a fixed rate
+        // Generate Nginx error logs less frequently for frontend and backend
         executor.scheduleAtFixedRate(() -> {
-            MySQLErrorLogGenerator.generateErrorLogs(1, mysqlLogDir + "/mysql_error.log", executor);
+            ErrorLogGenerator.generateErrorLogs(
+                1,
+                nginxFrontEndLogDir + "/error.log",
+                true
+            );
+        }, 0, 5, TimeUnit.SECONDS);
+
+        executor.scheduleAtFixedRate(() -> {
+            ErrorLogGenerator.generateErrorLogs(
+                1,
+                nginxBackendLogDir + "/error.log",
+                false
+            );
+        }, 0, 5, TimeUnit.SECONDS);
+
+        // Generate MySQL logs at fixed rates
+        executor.scheduleAtFixedRate(() -> {
+            MySQLErrorLogGenerator.generateErrorLogs(
+                1,
+                mysqlLogDir + "/error.log",
+                executor
+            );
         }, 0, 10, TimeUnit.SECONDS);
 
-        // Generate MySQL slow logs at a fixed rate
         executor.scheduleAtFixedRate(() -> {
-            MySQLSlowLogGenerator.generateSlowLogs(1, mysqlLogDir + "/mysql_slow.log");
+            MySQLSlowLogGenerator.generateSlowLogs(
+                1,
+                mysqlLogDir + "/mysql-slow.log"
+            );
         }, 0, 15, TimeUnit.SECONDS);
 
-        // Generate MySQL general logs at a fixed rate
         executor.scheduleAtFixedRate(() -> {
-            MySQLGeneralLogGenerator.generateGeneralLogs(1, mysqlLogDir + "/mysql_general.log");
+            MySQLGeneralLogGenerator.generateGeneralLogs(
+                1,
+                mysqlLogDir + "/mysql.log"
+            );
         }, 0, 5, TimeUnit.SECONDS);
 
-        // Generate frontend error logs less frequently
-        executor.scheduleAtFixedRate(() -> {
-            ErrorLogGenerator.generateErrorLogs(1, frontendLogDir + "/error.log", true);
-        }, 0, 5, TimeUnit.SECONDS);
-
-        // Generate backend error logs less frequently
-        executor.scheduleAtFixedRate(() -> {
-            ErrorLogGenerator.generateErrorLogs(1, backendLogDir + "/error.log", false);
-        }, 0, 5, TimeUnit.SECONDS);
-
+        // Start the metrics servers
         int frontendPort = 8080;
         int backendPort = 8081;
 
