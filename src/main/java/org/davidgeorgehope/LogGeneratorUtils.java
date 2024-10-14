@@ -30,10 +30,21 @@ public class LogGeneratorUtils {
     };
     public static final String anomalousHighRequestIP = "192.0.2.1"; // Reserved IP for documentation
     private static final Random RANDOM = new Random();
+    private static final List<String> ipPool = generateIpPool();
 
     static {
         ipToCountryMap.put("72.57.0.53", "IN"); // India
         // Add more mappings as needed
+    }
+
+    private static List<String> generateIpPool() {
+        List<String> ips = new ArrayList<>();
+        // Generate a list of 1000 unique IP addresses
+        for (int i = 0; i < 1000; i++) {
+            String ip = "192.168." + (i / 256) + "." + (i % 256);
+            ips.add(ip);
+        }
+        return ips;
     }
 
     public static String generateRandomIP(boolean includeAnomalous) {
@@ -44,19 +55,12 @@ public class LogGeneratorUtils {
             if (random.nextInt(100) < 80) { // 80% chance
                 return anomalousHighRequestIP;
             } else {
-                // Generate a random IP
-                return random.nextInt(256) + "." + random.nextInt(256) + "." +
-                        random.nextInt(256) + "." + random.nextInt(256);
+                // Select a random IP from the pool
+                return ipPool.get(random.nextInt(ipPool.size()));
             }
-        }
-
-        if (includeAnomalous && random.nextInt(100) < 50) { // 50% chance
-            return getRandomElement(anomalousIPs);
-        } else if (!includeAnomalous && random.nextInt(100) < 10) { // 10% chance in normal logs
-            return getRandomElement(anomalousIPs);
         } else {
-            return random.nextInt(256) + "." + random.nextInt(256) + "." +
-                    random.nextInt(256) + "." + random.nextInt(256);
+            // For normal operation, select a random IP from the pool
+            return ipPool.get(random.nextInt(ipPool.size()));
         }
     }
 
