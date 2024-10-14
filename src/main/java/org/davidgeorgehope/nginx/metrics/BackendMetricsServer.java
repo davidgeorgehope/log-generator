@@ -1,4 +1,4 @@
-package org.davidgeorgehope;
+package org.davidgeorgehope.nginx.metrics;
 
 import java.util.Random;
 

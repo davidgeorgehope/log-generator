@@ -1,8 +1,10 @@
-package org.davidgeorgehope;
+package org.davidgeorgehope.mysql;
 
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ThreadLocalRandom;
+
+import org.davidgeorgehope.LogGeneratorUtils;
 
 public class MySQLSlowLogEntry {
     private static final DateTimeFormatter SLOW_LOG_TIMESTAMP_FORMATTER =

@@ -1,5 +1,6 @@
-package org.davidgeorgehope;
+package org.davidgeorgehope.mysql;
 
+import org.davidgeorgehope.AnomalyConfig;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ThreadLocalRandom;
@@ -10,22 +11,48 @@ public class MySQLErrorLogEntry {
 
     private String timestamp;
     private String message;
+    private boolean isLowStorageWarning;
 
-    public MySQLErrorLogEntry(String timestamp, String message) {
+    public MySQLErrorLogEntry(String timestamp, String message, boolean isLowStorageWarning) {
         this.timestamp = timestamp;
         this.message = message;
+        this.isLowStorageWarning = isLowStorageWarning;
     }
 
-    public static MySQLErrorLogEntry createRandomEntry() {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        int entryType = random.nextInt(100);
+    public MySQLErrorLogEntry(String timestamp, String message) {
+        this(timestamp, message, false);
+    }
 
-        if (entryType < 20) {
-            // 20% chance to generate a low storage warning
-            return createLowStorageWarningEntry();
+    public static MySQLErrorLogEntry createRandomEntry(long elapsedTimeInSeconds) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+
+        if (AnomalyConfig.isInduceDatabaseOutage()) {
+            // Generate an outage entry during database outage
+            return createOutageEntry();
         } else {
-            // Other general log entries
-            return createGeneralLogEntry();
+            double warningProbability = calculateWarningProbability(elapsedTimeInSeconds);
+
+            // Introduce randomness in warning occurrence
+            if (random.nextDouble() < warningProbability * random.nextDouble()) {
+                // Generate a low storage warning
+                return createLowStorageWarningEntry();
+            } else {
+                // Generate general log entries
+                return createGeneralLogEntry();
+            }
+        }
+    }
+
+    private static double calculateWarningProbability(long elapsedTimeInSeconds) {
+        // No warnings in the first 2 hours (7200 seconds)
+        if (elapsedTimeInSeconds < 7200) {
+            return 0.0;
+        } else {
+            // Increase probability from 0% to 50% over the next 2 hours
+            long timeSinceStartOfWarnings = elapsedTimeInSeconds - 7200;
+            double maxProbability = 0.5;
+            double probability = Math.min(maxProbability, (double) timeSinceStartOfWarnings / 7200 * maxProbability);
+            return probability;
         }
     }
 
@@ -39,7 +66,7 @@ public class MySQLErrorLogEntry {
             "[Warning] Partition for table '" + table + "' is nearly full"
         };
         String message = messages[ThreadLocalRandom.current().nextInt(messages.length)];
-        return new MySQLErrorLogEntry(timestamp, message);
+        return new MySQLErrorLogEntry(timestamp, message, true);
     }
 
     private static MySQLErrorLogEntry createGeneralLogEntry() {
@@ -58,11 +85,6 @@ public class MySQLErrorLogEntry {
         return new MySQLErrorLogEntry(timestamp, message);
     }
 
-    @Override
-    public String toString() {
-        return timestamp + " " + message + System.lineSeparator();
-    }
-
     public static MySQLErrorLogEntry createOutageEntry() {
         String timestamp = ZonedDateTime.now().format(ERROR_LOG_TIMESTAMP_FORMATTER);
         String errorLevel = "ERROR";
@@ -72,5 +94,14 @@ public class MySQLErrorLogEntry {
 
         String fullMessage = errorLevel + " " + errorCode + " (" + sqlState + "): " + errorMessage;
         return new MySQLErrorLogEntry(timestamp, fullMessage);
+    }
+
+    public boolean isLowStorageWarning() {
+        return isLowStorageWarning;
+    }
+
+    @Override
+    public String toString() {
+        return timestamp + " " + message + System.lineSeparator();
     }
 }

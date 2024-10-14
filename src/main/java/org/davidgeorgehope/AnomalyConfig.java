@@ -1,13 +1,13 @@
 package org.davidgeorgehope;
 
 public class AnomalyConfig {
-    private static boolean induceHighVisitorRate = false;
-    private static boolean induceHighErrorRate = false;
-    private static boolean induceHighRequestRateFromSingleIP = false;
-    private static boolean induceHighDistinctURLsFromSingleIP = false;
-    private static boolean induceLowRequestRate = false;
-    private static boolean induceDatabaseOutage = false; // New anomaly flag
-    
+    private static volatile boolean induceHighVisitorRate = false;
+    private static volatile boolean induceHighErrorRate = false;
+    private static volatile boolean induceHighRequestRateFromSingleIP = false;
+    private static volatile boolean induceHighDistinctURLsFromSingleIP = false;
+    private static volatile boolean induceLowRequestRate = false;
+    private static volatile boolean induceDatabaseOutage = false;
+
     // Getters and Setters
     public static boolean isInduceHighVisitorRate() {
         return induceHighVisitorRate;

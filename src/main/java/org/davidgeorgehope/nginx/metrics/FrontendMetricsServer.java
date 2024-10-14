@@ -1,4 +1,4 @@
-package org.davidgeorgehope;
+package org.davidgeorgehope.nginx.metrics;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;

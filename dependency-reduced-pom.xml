@@ -32,7 +32,7 @@
             <configuration>
               <transformers>
                 <transformer>
-                  <mainClass>org.davidgeorgehope.NginxLogGenerator</mainClass>
+                  <mainClass>org.davidgeorgehope.DataGenerator</mainClass>
                 </transformer>
               </transformers>
             </configuration>

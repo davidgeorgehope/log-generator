@@ -1,4 +1,4 @@
-package org.davidgeorgehope;
+package org.davidgeorgehope.mysql;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

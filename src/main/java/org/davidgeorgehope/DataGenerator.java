@@ -1,5 +1,12 @@
 package org.davidgeorgehope;
 
+import org.davidgeorgehope.mysql.MySQLErrorLogGenerator;
+import org.davidgeorgehope.mysql.MySQLGeneralLogGenerator;
+import org.davidgeorgehope.mysql.MySQLSlowLogGenerator;
+import org.davidgeorgehope.nginx.logs.AccessLogGenerator;
+import org.davidgeorgehope.nginx.logs.ErrorLogGenerator;
+import org.davidgeorgehope.nginx.metrics.BackendMetricsServer;
+import org.davidgeorgehope.nginx.metrics.FrontendMetricsServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Random;
@@ -7,8 +14,9 @@ import java.util.Random;
 import java.io.File;
 import java.util.concurrent.*;
 
-public class NginxLogGenerator {
-    private static final Logger logger = LoggerFactory.getLogger(NginxLogGenerator.class);
+public class DataGenerator {
+    private static final Logger logger = LoggerFactory.getLogger(DataGenerator.class);
+    private static final long applicationStartTime = System.currentTimeMillis();
 
     public static void main(String[] args) {
         String frontendLogDir = "logs/frontend";
@@ -44,7 +52,7 @@ public class NginxLogGenerator {
 
         // Generate MySQL error logs at a fixed rate
         executor.scheduleAtFixedRate(() -> {
-            MySQLErrorLogGenerator.generateErrorLogs(1, mysqlLogDir + "/mysql_error.log");
+            MySQLErrorLogGenerator.generateErrorLogs(1, mysqlLogDir + "/mysql_error.log", executor);
         }, 0, 10, TimeUnit.SECONDS);
 
         // Generate MySQL slow logs at a fixed rate
@@ -93,20 +101,23 @@ public class NginxLogGenerator {
 
     private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
         Random random = new Random();
-
+    
         int minDelay = 3600; // Minimum delay between anomalies (e.g., 1 hour)
         int maxDelay = 10800; // Maximum delay between anomalies (e.g., 3 hours)
         int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay;
-
+    
         executor.schedule(() -> {
             updateAnomalyConfig();
-
-            // Schedule to reset the anomaly after a short duration
-            int anomalyDuration = 300; // Anomaly lasts for 5 minutes
+    
+            // Schedule to reset the anomaly after a random short duration
+            int minAnomalyDuration = 180; // Minimum anomaly duration (e.g., 3 minutes)
+            int maxAnomalyDuration = 400; // Maximum anomaly duration (e.g., 10 minutes)
+            int anomalyDuration = random.nextInt(maxAnomalyDuration - minAnomalyDuration + 1) + minAnomalyDuration;
+    
             executor.schedule(() -> {
                 resetAnomalyConfig();
             }, anomalyDuration, TimeUnit.SECONDS);
-
+    
             // Reschedule the next anomaly
             scheduleAnomalyConfigUpdate(executor);
         }, delay, TimeUnit.SECONDS);
@@ -115,15 +126,14 @@ public class NginxLogGenerator {
     private static void updateAnomalyConfig() {
         // Randomly set anomalies in a complementary pattern
         Random random = new Random();
-        int anomalyType = random.nextInt(6); // Now 6 possible anomalies
+        int anomalyType = random.nextInt(5); // Now 5 possible anomalies, excluding database outage
 
-        // Reset all anomalies
+        // Reset all anomalies except database outage (handled separately)
         AnomalyConfig.setInduceHighVisitorRate(false);
         AnomalyConfig.setInduceHighErrorRate(false);
         AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
         AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
         AnomalyConfig.setInduceLowRequestRate(false);
-        AnomalyConfig.setInduceDatabaseOutage(false);
 
         switch (anomalyType) {
             case 0:
@@ -141,14 +151,13 @@ public class NginxLogGenerator {
             case 4:
                 AnomalyConfig.setInduceLowRequestRate(true);
                 break;
-            case 5:
-                AnomalyConfig.setInduceDatabaseOutage(true); // New anomaly case
-                break;
+            // No case for database outage; it will be triggered based on warning count
         }
-        logger.info("Anomaly configuration updated: HighVisitorRate={}, HighErrorRate={}, HighRequestRateFromSingleIP={}, HighDistinctURLsFromSingleIP={}, LowRequestRate={}, DatabaseOutage={}",
+
+        logger.info("Anomaly configuration updated: HighVisitorRate={}, HighErrorRate={}, HighRequestRateFromSingleIP={}, HighDistinctURLsFromSingleIP={}, LowRequestRate={}",
                 AnomalyConfig.isInduceHighVisitorRate(), AnomalyConfig.isInduceHighErrorRate(),
                 AnomalyConfig.isInduceHighRequestRateFromSingleIP(), AnomalyConfig.isInduceHighDistinctURLsFromSingleIP(),
-                AnomalyConfig.isInduceLowRequestRate(), AnomalyConfig.isInduceDatabaseOutage());
+                AnomalyConfig.isInduceLowRequestRate());
     }
 
     private static void resetAnomalyConfig() {
@@ -158,8 +167,16 @@ public class NginxLogGenerator {
         AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
         AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
         AnomalyConfig.setInduceLowRequestRate(false);
-        AnomalyConfig.setInduceDatabaseOutage(false);
+        // Remove or comment out the following line
+        // AnomalyConfig.setInduceDatabaseOutage(false);
+
+        // Reset the low storage warning count
+        MySQLErrorLogGenerator.resetLowStorageWarningCount();
 
         logger.info("Anomaly configuration reset to normal.");
+    }
+
+    public static long getApplicationStartTime() {
+        return applicationStartTime;
     }
 }
