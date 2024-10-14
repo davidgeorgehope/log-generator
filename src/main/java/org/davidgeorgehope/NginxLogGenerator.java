@@ -94,13 +94,21 @@ public class NginxLogGenerator {
     private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
         Random random = new Random();
 
-        int minDelay = 1500; // 25 miuntes
-        int maxDelay = 3000; // 50 minutes
-        int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay; // Random delay between 3000 and 6000 seconds
+        int minDelay = 3600; // Minimum delay between anomalies (e.g., 1 hour)
+        int maxDelay = 10800; // Maximum delay between anomalies (e.g., 3 hours)
+        int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay;
 
         executor.schedule(() -> {
             updateAnomalyConfig();
-            scheduleAnomalyConfigUpdate(executor); // Reschedule after execution
+
+            // Schedule to reset the anomaly after a short duration
+            int anomalyDuration = 300; // Anomaly lasts for 5 minutes
+            executor.schedule(() -> {
+                resetAnomalyConfig();
+            }, anomalyDuration, TimeUnit.SECONDS);
+
+            // Reschedule the next anomaly
+            scheduleAnomalyConfigUpdate(executor);
         }, delay, TimeUnit.SECONDS);
     }
 
@@ -141,5 +149,17 @@ public class NginxLogGenerator {
                 AnomalyConfig.isInduceHighVisitorRate(), AnomalyConfig.isInduceHighErrorRate(),
                 AnomalyConfig.isInduceHighRequestRateFromSingleIP(), AnomalyConfig.isInduceHighDistinctURLsFromSingleIP(),
                 AnomalyConfig.isInduceLowRequestRate(), AnomalyConfig.isInduceDatabaseOutage());
+    }
+
+    private static void resetAnomalyConfig() {
+        // Reset all anomalies to normal state
+        AnomalyConfig.setInduceHighVisitorRate(false);
+        AnomalyConfig.setInduceHighErrorRate(false);
+        AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
+        AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
+        AnomalyConfig.setInduceLowRequestRate(false);
+        AnomalyConfig.setInduceDatabaseOutage(false);
+
+        logger.info("Anomaly configuration reset to normal.");
     }
 }
