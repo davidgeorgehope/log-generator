@@ -4,6 +4,7 @@ import org.davidgeorgehope.AnomalyConfig;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MySQLErrorLogEntry {
     private static final DateTimeFormatter ERROR_LOG_TIMESTAMP_FORMATTER =
@@ -12,6 +13,9 @@ public class MySQLErrorLogEntry {
     private String timestamp;
     private String message;
     private boolean isLowStorageWarning;
+
+    // Reference to warningStartTime
+    private static AtomicLong warningStartTime = MySQLErrorLogGenerator.warningStartTime;
 
     public MySQLErrorLogEntry(String timestamp, String message, boolean isLowStorageWarning) {
         this.timestamp = timestamp;
@@ -30,7 +34,7 @@ public class MySQLErrorLogEntry {
             // Generate an outage entry during database outage
             return createOutageEntry();
         } else {
-            double warningProbability = calculateWarningProbability(elapsedTimeInSeconds);
+            double warningProbability = calculateWarningProbability();
 
             // Introduce randomness in warning occurrence
             if (random.nextDouble() < warningProbability * random.nextDouble()) {
@@ -43,7 +47,9 @@ public class MySQLErrorLogEntry {
         }
     }
 
-    private static double calculateWarningProbability(long elapsedTimeInSeconds) {
+    private static double calculateWarningProbability() {
+        long elapsedTimeInSeconds = (System.currentTimeMillis() - warningStartTime.get()) / 1000;
+
         // No warnings in the first 2 hours (7200 seconds)
         if (elapsedTimeInSeconds < 7200) {
             return 0.0;

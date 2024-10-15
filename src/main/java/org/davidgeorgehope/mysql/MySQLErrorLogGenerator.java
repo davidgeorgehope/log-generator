@@ -12,9 +12,11 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MySQLErrorLogGenerator {
     private static final Logger logger = LoggerFactory.getLogger(MySQLErrorLogGenerator.class);
+    public static final AtomicLong warningStartTime = new AtomicLong(System.currentTimeMillis());
 
     private static int lowStorageWarningCount = 0;
     private static int warningThreshold = ThreadLocalRandom.current().nextInt(8, 15); // Random threshold between 8 and 14
@@ -56,16 +58,20 @@ public class MySQLErrorLogGenerator {
     }
 
     private static void scheduleDatabaseOutageReset(ScheduledExecutorService executor) {
-        int minOutageDuration = 180; // Minimum outage duration (e.g., 3 minutes)
-        int maxOutageDuration = 600; // Maximum outage duration (e.g., 10 minutes)
+        int minOutageDuration = 180; // Minimum outage duration (3 minutes)
+        int maxOutageDuration = 600; // Maximum outage duration (10 minutes)
         int outageDuration = ThreadLocalRandom.current().nextInt(minOutageDuration, maxOutageDuration + 1);
 
         executor.schedule(() -> {
             AnomalyConfig.setInduceDatabaseOutage(false);
             logger.info("Database outage resolved.");
 
-            // Reset the low storage warning count here
+            // Reset the low storage warning count
             resetLowStorageWarningCount();
+
+            // Reset the warning start time
+            warningStartTime.set(System.currentTimeMillis());
+
         }, outageDuration, TimeUnit.SECONDS);
     }
 
