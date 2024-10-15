@@ -23,10 +23,9 @@ public class MySQLErrorLogGenerator {
 
     public static void generateErrorLogs(int logsToGenerate, String filePath, ScheduledExecutorService executor) {
         List<MySQLErrorLogEntry> entries = new ArrayList<>();
-        long elapsedTimeInSeconds = (System.currentTimeMillis() - DataGenerator.getApplicationStartTime()) / 1000;
 
         for (int i = 0; i < logsToGenerate; i++) {
-            MySQLErrorLogEntry entry = MySQLErrorLogEntry.createRandomEntry(elapsedTimeInSeconds);
+            MySQLErrorLogEntry entry = MySQLErrorLogEntry.createRandomEntry();
 
             if (entry.isLowStorageWarning()) {
                 lowStorageWarningCount++;

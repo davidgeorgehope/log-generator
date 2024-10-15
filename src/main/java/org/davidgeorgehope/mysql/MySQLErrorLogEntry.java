@@ -27,7 +27,7 @@ public class MySQLErrorLogEntry {
         this(timestamp, message, false);
     }
 
-    public static MySQLErrorLogEntry createRandomEntry(long elapsedTimeInSeconds) {
+    public static MySQLErrorLogEntry createRandomEntry() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
         if (AnomalyConfig.isInduceDatabaseOutage()) {
