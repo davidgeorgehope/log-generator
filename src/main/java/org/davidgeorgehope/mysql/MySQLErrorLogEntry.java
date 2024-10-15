@@ -98,7 +98,8 @@ public class MySQLErrorLogEntry {
         String sqlState = "HY000";
         String errorMessage = "The table 'orders' is full";
 
-        String fullMessage = errorLevel + " " + errorCode + " (" + sqlState + "): " + errorMessage;
+        // Include log level in square brackets
+        String fullMessage = "[" + errorLevel + "] " + errorCode + " (" + sqlState + "): " + errorMessage;
         return new MySQLErrorLogEntry(timestamp, fullMessage);
     }
 
