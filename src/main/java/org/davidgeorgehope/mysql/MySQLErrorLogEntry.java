@@ -5,6 +5,8 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.List;
+import java.util.ArrayList;
 
 public class MySQLErrorLogEntry {
     private static final DateTimeFormatter ERROR_LOG_TIMESTAMP_FORMATTER =
@@ -27,24 +29,29 @@ public class MySQLErrorLogEntry {
         this(timestamp, message, false);
     }
 
-    public static MySQLErrorLogEntry createRandomEntry() {
+    public static List<MySQLErrorLogEntry> createRandomEntries() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        List<MySQLErrorLogEntry> entries = new ArrayList<>();
 
         if (AnomalyConfig.isInduceDatabaseOutage()) {
-            // Generate an outage entry during database outage
-            return createOutageEntry();
+            // Generate multiple outage entries during database outage
+            int numberOfEntries = random.nextInt(10, 20); // Generate 3 to 6 entries
+            for (int i = 0; i < numberOfEntries; i++) {
+                entries.add(createOutageEntry());
+            }
         } else {
             double warningProbability = calculateWarningProbability();
 
             // Introduce randomness in warning occurrence
             if (random.nextDouble() < warningProbability * random.nextDouble()) {
                 // Generate a low storage warning
-                return createLowStorageWarningEntry();
+                entries.add(createLowStorageWarningEntry());
             } else {
-                // Generate general log entries
-                return createGeneralLogEntry();
+                // Generate a general log entry
+                entries.add(createGeneralLogEntry());
             }
         }
+        return entries;
     }
 
     private static double calculateWarningProbability() {

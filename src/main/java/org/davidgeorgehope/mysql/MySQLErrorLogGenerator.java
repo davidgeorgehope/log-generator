@@ -25,13 +25,14 @@ public class MySQLErrorLogGenerator {
         List<MySQLErrorLogEntry> entries = new ArrayList<>();
 
         for (int i = 0; i < logsToGenerate; i++) {
-            MySQLErrorLogEntry entry = MySQLErrorLogEntry.createRandomEntry();
-
-            if (entry.isLowStorageWarning()) {
+            List<MySQLErrorLogEntry> entry = MySQLErrorLogEntry.createRandomEntries();
+           
+            MySQLErrorLogEntry firstEntry = entry.get(0);
+            if (firstEntry.isLowStorageWarning()) {
                 lowStorageWarningCount++;
             }
 
-            entries.add(entry);
+            entries.addAll(entry);
 
             // Trigger database outage after random threshold is reached
             if (lowStorageWarningCount >= warningThreshold && !AnomalyConfig.isInduceDatabaseOutage()) {
