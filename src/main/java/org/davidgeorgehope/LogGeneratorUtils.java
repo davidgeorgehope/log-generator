@@ -271,7 +271,7 @@ public class LogGeneratorUtils {
         if (AnomalyConfig.isInduceHighVisitorRate()) {
             meanRequestsPerSecond = 500;
         } else if (AnomalyConfig.isInduceLowRequestRate()) {
-            meanRequestsPerSecond = 5;
+            meanRequestsPerSecond = 1;
         }
 
         // Parameters for the Pareto distribution
