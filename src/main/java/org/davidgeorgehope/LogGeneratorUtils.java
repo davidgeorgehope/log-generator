@@ -77,18 +77,42 @@ public class LogGeneratorUtils {
 
     public static String generateRandomIP(boolean includeAnomalous) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        List<String> ipPool = getIpPool();
 
         if (AnomalyConfig.isInduceHighRequestRateFromSingleIP()) {
-            // Generate majority of traffic from a single IP
-            if (random.nextInt(100) < 80) { // 80% chance
+            // Generate a Zipf-distributed index
+            int size = ipPool.size();
+            double exponent = 1.0; // Adjust the exponent as needed
+            double harmonic = 0.0;
+
+            // Calculate the harmonic number for normalization
+            for (int i = 1; i <= size; i++) {
+                harmonic += 1.0 / Math.pow(i, exponent);
+            }
+
+            // Generate a random value
+            double rand = random.nextDouble();
+
+            // Find the index corresponding to the random value
+            double cumulativeProbability = 0.0;
+            int index = 0;
+            for (int i = 1; i <= size; i++) {
+                cumulativeProbability += (1.0 / Math.pow(i, exponent)) / harmonic;
+                if (rand <= cumulativeProbability) {
+                    index = i - 1;
+                    break;
+                }
+            }
+
+            // Ensure the anomalous IP is at the top
+            if (index == 0) {
                 return anomalousHighRequestIP;
             } else {
-                // Select a random IP from the pool
-                return getIpPool().get(random.nextInt(getIpPool().size()));
+                return ipPool.get(index % ipPool.size());
             }
         } else {
-            // For normal operation, select a random IP from the pool
-            return getIpPool().get(random.nextInt(getIpPool().size()));
+            // Normal operation
+            return ipPool.get(random.nextInt(ipPool.size()));
         }
     }
 
@@ -113,16 +137,16 @@ public class LogGeneratorUtils {
 
     public static String getRandomURL(String username, boolean isFrontend) {
         String[] urls = isFrontend ? frontendUrls : backendUrls;
-        String baseUrl = getRandomElement(urls);
-
-        ThreadLocalRandom random = ThreadLocalRandom.current();
+        String baseUrl;
 
         // If inducing high distinct URLs from single IP
-        if (AnomalyConfig.isInduceHighDistinctURLsFromSingleIP()) {
-            if (UserSessionManager.currentIP.equals(anomalousHighRequestIP)) {
-                // Access a wide range of URLs
-                baseUrl = getRandomElement(urls);
-            }
+        if (AnomalyConfig.isInduceHighDistinctURLsFromSingleIP()
+            && UserSessionManager.currentIP.equals(anomalousHighRequestIP)) {
+            // Access a wide range of URLs by iterating through the list
+            baseUrl = urls[RANDOM.nextInt(urls.length)];
+        } else {
+            // Normal behavior
+            baseUrl = getRandomElement(urls);
         }
 
         // Replace placeholders with random values
@@ -179,25 +203,31 @@ public class LogGeneratorUtils {
         return headers;
     }
 
+    private static Integer cachedErrorStatusCode = null;
+
     public static int getStatusCode(String ip, boolean isAnomalous) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
         if (AnomalyConfig.isInduceDatabaseOutage()) {
-            // Force 100% 500 Internal Server Errors
+            // Select a specific error code for database outage
             return 500;
         }
 
         if (AnomalyConfig.isInduceHighErrorRate()) {
-            // Increase the chance of errors
-            if (random.nextInt(100) < 70) { // 70% chance of error
-                return getRandomErrorStatusCode();
-            } else {
-                return getRandomSuccessStatusCode();
+            // During high error rate anomaly
+            if (cachedErrorStatusCode == null) {
+                // Select a random error status code once and cache it
+                cachedErrorStatusCode = getRandomErrorStatusCode();
             }
+            // Use the cached error status code for all requests
+            return cachedErrorStatusCode;
         }
 
+        // Reset the cached error status code when anomaly is not active
+        cachedErrorStatusCode = null;
+
         // Existing logic
-        if (anomalousIPs.contains(ip)) {
+        if (anomalousIPs.contains(ip) || isAnomalous) {
             return getRandomErrorStatusCode();
         } else {
             return getRandomStatusCode(isAnomalous);
@@ -215,32 +245,18 @@ public class LogGeneratorUtils {
     }
 
     private static int getRandomErrorStatusCode() {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        int chance = random.nextInt(100);
-        if (chance < 80) {
-            return 404; // 80% chance of 404
-        } else if (chance < 90) {
-            return 403; // 10% chance of 403
-        } else {
-            return 500; // 10% chance of 500
-        }
+        // Define possible error status codes
+        int[] errorCodes = {400, 401, 403, 404, 500, 502, 503, 504};
+        return errorCodes[ThreadLocalRandom.current().nextInt(errorCodes.length)];
     }
 
     private static int getRandomStatusCode(boolean isAnomalous) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         int chance = random.nextInt(100);
-        if (isAnomalous) {
-            if (chance < 70) {
-                return getRandomErrorStatusCode(); // 70% chance of error
-            } else {
-                return getRandomSuccessStatusCode();
-            }
+        if (chance < 90) {
+            return getRandomSuccessStatusCode(); // 90% chance of success
         } else {
-            if (chance < 90) {
-                return getRandomSuccessStatusCode(); // 90% chance of success
-            } else {
-                return getRandomErrorStatusCode();
-            }
+            return getRandomErrorStatusCode();   // 10% chance of error
         }
     }
 
@@ -251,13 +267,25 @@ public class LogGeneratorUtils {
     }
 
     public static int getLogsToGenerate() {
-        double meanRequestsPerSecond = 50; // Normal mean request rate
+        double meanRequestsPerSecond = 50;
         if (AnomalyConfig.isInduceHighVisitorRate()) {
-            meanRequestsPerSecond = 500; // Increase mean request rate during high visitor rate anomaly
+            meanRequestsPerSecond = 500;
         } else if (AnomalyConfig.isInduceLowRequestRate()) {
-            meanRequestsPerSecond = 5; // Decrease mean request rate during low request rate anomaly
+            meanRequestsPerSecond = 5;
         }
-        return (int) Math.round(-Math.log(1 - RANDOM.nextDouble()) * meanRequestsPerSecond);
+
+        // Parameters for the Pareto distribution
+        double scale = 1.0;
+        double shape = 1.5; // Lower values produce heavier tails
+
+        // Generate a Pareto-distributed random number
+        double u = RANDOM.nextDouble();
+        double paretoValue = scale / Math.pow(u, 1.0 / shape);
+
+        // Adjust the mean requests per second based on the Pareto value
+        int logsToGenerate = (int) Math.round(meanRequestsPerSecond * paretoValue);
+
+        return logsToGenerate;
     }
 
     public static String getRandomErrorMessage(boolean isFrontend, String url) {
