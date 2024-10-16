@@ -13,6 +13,10 @@ import java.util.Random;
 
 import java.io.File;
 import java.util.concurrent.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.Consumer;
 
 public class DataGenerator {
     private static final Logger logger = LoggerFactory.getLogger(DataGenerator.class);
@@ -123,64 +127,57 @@ public class DataGenerator {
     }
 
     private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
-        Random random = new Random();
-    
-        int minDelay = 3600; // Minimum delay between anomalies (e.g., 1 hour)
-        int maxDelay = 10800; // Maximum delay between anomalies (e.g., 3 hours)
-        int delay = random.nextInt(maxDelay - minDelay + 1) + minDelay;
-    
+
+        // Use exponential distribution for delay
+        double meanDelay = 7200; // Mean time between anomalies (e.g., 2 hours)
+        double delay = getExponentialRandom(meanDelay);
+
         executor.schedule(() -> {
             updateAnomalyConfig();
-    
-            // Schedule to reset the anomaly after a random short duration
-            int minAnomalyDuration = 180; // Minimum anomaly duration (e.g., 3 minutes)
-            int maxAnomalyDuration = 400; // Maximum anomaly duration (e.g., 10 minutes)
-            int anomalyDuration = random.nextInt(maxAnomalyDuration - minAnomalyDuration + 1) + minAnomalyDuration;
-    
+
+            // Schedule to reset the anomaly after a random duration
+            double meanAnomalyDuration = 300; // Mean anomaly duration (e.g., 5 minutes)
+            double anomalyDuration = getExponentialRandom(meanAnomalyDuration);
+
             executor.schedule(() -> {
                 resetAnomalyConfig();
-            }, anomalyDuration, TimeUnit.SECONDS);
-    
+            }, (long) anomalyDuration, TimeUnit.SECONDS);
+
             // Reschedule the next anomaly
             scheduleAnomalyConfigUpdate(executor);
-        }, delay, TimeUnit.SECONDS);
+        }, (long) delay, TimeUnit.SECONDS);
     }
 
     private static void updateAnomalyConfig() {
-        // Randomly set anomalies in a complementary pattern
         Random random = new Random();
-        int anomalyType = random.nextInt(5); // Now 5 possible anomalies, excluding database outage
+        int numberOfAnomalies = random.nextInt(3) + 1; // 1 to 3 anomalies
 
-        // Reset all anomalies except database outage (handled separately)
-        AnomalyConfig.setInduceHighVisitorRate(false);
-        AnomalyConfig.setInduceHighErrorRate(false);
-        AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
-        AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
-        AnomalyConfig.setInduceLowRequestRate(false);
+        // Reset all anomalies first
+        resetAnomalyConfig();
 
-        switch (anomalyType) {
-            case 0:
-                AnomalyConfig.setInduceHighVisitorRate(true);
-                break;
-            case 1:
-                AnomalyConfig.setInduceHighErrorRate(true);
-                break;
-            case 2:
-                AnomalyConfig.setInduceHighRequestRateFromSingleIP(true);
-                break;
-            case 3:
-                AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(true);
-                break;
-            case 4:
-                AnomalyConfig.setInduceLowRequestRate(true);
-                break;
-            // No case for database outage; it will be triggered based on warning count
+        // List of possible anomalies with severity
+        List<Consumer<Double>> anomalies = Arrays.asList(
+            (severity) -> AnomalyConfig.setInduceHighVisitorRate(true),
+            (severity) -> AnomalyConfig.setInduceHighErrorRate(true),
+            (severity) -> AnomalyConfig.setInduceHighRequestRateFromSingleIP(true),
+            (severity) -> AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(true),
+            (severity) -> AnomalyConfig.setInduceLowRequestRate(true)
+        );
+
+        // Shuffle and activate anomalies
+        Collections.shuffle(anomalies);
+        for (int i = 0; i < numberOfAnomalies; i++) {
+            double severity = 1.0 + random.nextDouble() * 9.0; // Severity between 1 and 10
+            anomalies.get(i).accept(severity);
         }
 
-        logger.info("Anomaly configuration updated: HighVisitorRate={}, HighErrorRate={}, HighRequestRateFromSingleIP={}, HighDistinctURLsFromSingleIP={}, LowRequestRate={}",
-                AnomalyConfig.isInduceHighVisitorRate(), AnomalyConfig.isInduceHighErrorRate(),
-                AnomalyConfig.isInduceHighRequestRateFromSingleIP(), AnomalyConfig.isInduceHighDistinctURLsFromSingleIP(),
-                AnomalyConfig.isInduceLowRequestRate());
+        // Log the activated anomalies and their severities
+        logger.info("Anomalies activated with varying severities.");
+    }
+
+    private static double getExponentialRandom(double mean) {
+        Random random = new Random();
+        return -mean * Math.log(1 - random.nextDouble());
     }
 
     private static void resetAnomalyConfig() {
