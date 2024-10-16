@@ -22,6 +22,8 @@ public class DataGenerator {
     private static final Logger logger = LoggerFactory.getLogger(DataGenerator.class);
     private static final long applicationStartTime = System.currentTimeMillis();
 
+    private static final Random random = new Random();
+
     public static void main(String[] args) {
         // Standard log directories
         String nginxFrontEndLogDir = "/var/log/nginx_frontend";
@@ -127,17 +129,17 @@ public class DataGenerator {
     }
 
     private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
-
-        // Use exponential distribution for delay
         double meanDelay = 7200; // Mean time between anomalies (e.g., 2 hours)
-        double delay = getExponentialRandom(meanDelay);
+        double maxDelay = 10800; // Maximum delay (e.g., 3 hours)
+        double delay = getTruncatedExponentialRandom(meanDelay, maxDelay);
 
         executor.schedule(() -> {
             updateAnomalyConfig();
 
             // Schedule to reset the anomaly after a random duration
             double meanAnomalyDuration = 300; // Mean anomaly duration (e.g., 5 minutes)
-            double anomalyDuration = getExponentialRandom(meanAnomalyDuration);
+            double maxAnomalyDuration = 600;  // Maximum anomaly duration (e.g., 10 minutes)
+            double anomalyDuration = getTruncatedExponentialRandom(meanAnomalyDuration, maxAnomalyDuration);
 
             executor.schedule(() -> {
                 resetAnomalyConfig();
@@ -175,9 +177,12 @@ public class DataGenerator {
         logger.info("Anomalies activated with varying severities.");
     }
 
-    private static double getExponentialRandom(double mean) {
-        Random random = new Random();
-        return -mean * Math.log(1 - random.nextDouble());
+
+    private static double getTruncatedExponentialRandom(double mean, double maxDelay) {
+        double u = random.nextDouble();
+        double Fmax = 1 - Math.exp(-maxDelay / mean);
+        double delay = -mean * Math.log(1 - u * Fmax);
+        return delay;
     }
 
     private static void resetAnomalyConfig() {
