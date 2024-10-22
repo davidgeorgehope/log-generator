@@ -58,7 +58,7 @@ public class MySQLErrorLogEntry {
         long elapsedTimeInSeconds = (System.currentTimeMillis() - warningStartTime.get()) / 1000;
 
         // No warnings in the first 2 hours (7200 seconds)
-        if (anomaliesDisabled && elapsedTimeInSeconds < 7200) {
+        if (anomaliesDisabled || elapsedTimeInSeconds < 7200) {
             return 0.0;
         } else {
             // Increase probability from 0% to 50% over the next 2 hours
