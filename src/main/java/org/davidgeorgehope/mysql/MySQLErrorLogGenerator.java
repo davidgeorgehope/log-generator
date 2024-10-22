@@ -21,12 +21,12 @@ public class MySQLErrorLogGenerator {
     private static int lowStorageWarningCount = 0;
     private static int warningThreshold = ThreadLocalRandom.current().nextInt(8, 15); // Random threshold between 8 and 14
 
-    public static void generateErrorLogs(int logsToGenerate, String filePath, ScheduledExecutorService executor) {
+    public static void generateErrorLogs(int logsToGenerate, String filePath, ScheduledExecutorService executor, boolean anomaliesDisabled) {
         List<MySQLErrorLogEntry> entries = new ArrayList<>();
 
         for (int i = 0; i < logsToGenerate; i++) {
-            List<MySQLErrorLogEntry> entry = MySQLErrorLogEntry.createRandomEntries();
-           
+            List<MySQLErrorLogEntry> entry = MySQLErrorLogEntry.createRandomEntries(anomaliesDisabled);
+
             MySQLErrorLogEntry firstEntry = entry.get(0);
             if (firstEntry.isLowStorageWarning()) {
                 lowStorageWarningCount++;
@@ -35,7 +35,7 @@ public class MySQLErrorLogGenerator {
             entries.addAll(entry);
 
             // Trigger database outage after random threshold is reached
-            if (lowStorageWarningCount >= warningThreshold && !AnomalyConfig.isInduceDatabaseOutage()) {
+            if (!anomaliesDisabled && lowStorageWarningCount >= warningThreshold && !AnomalyConfig.isInduceDatabaseOutage()) {
                 AnomalyConfig.setInduceDatabaseOutage(true);
                 logger.info("Database outage induced due to low storage warnings.");
 

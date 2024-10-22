@@ -29,7 +29,7 @@ public class MySQLErrorLogEntry {
         this(timestamp, message, false);
     }
 
-    public static List<MySQLErrorLogEntry> createRandomEntries() {
+    public static List<MySQLErrorLogEntry> createRandomEntries(boolean anomaliesDisabled) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<MySQLErrorLogEntry> entries = new ArrayList<>();
 
@@ -40,7 +40,7 @@ public class MySQLErrorLogEntry {
                 entries.add(createOutageEntry());
             }
         } else {
-            double warningProbability = calculateWarningProbability();
+            double warningProbability = calculateWarningProbability(anomaliesDisabled);
 
             // Introduce randomness in warning occurrence
             if (random.nextDouble() < warningProbability * random.nextDouble()) {
@@ -54,11 +54,11 @@ public class MySQLErrorLogEntry {
         return entries;
     }
 
-    private static double calculateWarningProbability() {
+    private static double calculateWarningProbability(boolean anomaliesDisabled) {
         long elapsedTimeInSeconds = (System.currentTimeMillis() - warningStartTime.get()) / 1000;
 
         // No warnings in the first 2 hours (7200 seconds)
-        if (elapsedTimeInSeconds < 7200) {
+        if (!anomaliesDisabled && elapsedTimeInSeconds < 7200) {
             return 0.0;
         } else {
             // Increase probability from 0% to 50% over the next 2 hours

@@ -16,13 +16,26 @@ import java.util.concurrent.*;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class DataGenerator {
     private static final Logger logger = LoggerFactory.getLogger(DataGenerator.class);
     private static final long applicationStartTime = System.currentTimeMillis();
+    private static boolean disableAnomalies = false; // Moved from local variable to static field
 
     public static void main(String[] args) {
+        // Parse command-line arguments
+
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(5);
+
+        for (String arg : args) {
+            if (arg.equalsIgnoreCase("--no-anomalies")) {
+                disableAnomalies = true;
+                scheduleAnomalyReenabling(executor);
+                logger.info("Anomaly generation and database outages are disabled for 24 hours.");
+                break;
+            }
+        }
+
         // Standard log directories
         String nginxFrontEndLogDir = "/var/log/nginx_frontend";
         String nginxBackendLogDir = "/var/log/nginx_backend";
@@ -33,12 +46,16 @@ public class DataGenerator {
         new File(nginxBackendLogDir).mkdirs();
         new File(mysqlLogDir).mkdirs();
 
-        ScheduledExecutorService executor = Executors.newScheduledThreadPool(5);
 
         UserSessionManager userSessionManager = new UserSessionManager();
 
-        // Start the random scheduling of anomaly configuration updates
-        scheduleAnomalyConfigUpdate(executor);
+        // Start the random scheduling of anomaly configuration updates if anomalies are enabled
+        if (!disableAnomalies) {
+            scheduleAnomalyConfigUpdate(executor);
+        } else {
+            // Ensure anomalies are reset
+            resetAnomalyConfig();
+        }
 
         // Generate Nginx access logs continuously for frontend and backend
         executor.scheduleAtFixedRate(() -> {
@@ -83,7 +100,8 @@ public class DataGenerator {
             MySQLErrorLogGenerator.generateErrorLogs(
                 1,
                 mysqlLogDir + "/error.log",
-                executor
+                executor,
+                disableAnomalies // Now refers to the static field
             );
         }, 0, 10, TimeUnit.SECONDS);
 
@@ -127,7 +145,6 @@ public class DataGenerator {
     }
 
     private static void scheduleAnomalyConfigUpdate(ScheduledExecutorService executor) {
-
         // Use exponential distribution for delay
         double meanDelay = 7200; // Mean time between anomalies (e.g., 2 hours)
         double delay = getExponentialRandom(meanDelay);
@@ -156,23 +173,21 @@ public class DataGenerator {
         resetAnomalyConfig();
 
         // List of possible anomalies with severity
-        List<Consumer<Double>> anomalies = Arrays.asList(
-            (severity) -> AnomalyConfig.setInduceHighVisitorRate(true),
-            (severity) -> AnomalyConfig.setInduceHighErrorRate(true),
-            (severity) -> AnomalyConfig.setInduceHighRequestRateFromSingleIP(true),
-            (severity) -> AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(true),
-            (severity) -> AnomalyConfig.setInduceLowRequestRate(true)
-        );
+        List<Runnable> anomalies = Arrays.asList(
+            () -> AnomalyConfig.setInduceHighVisitorRate(true),
+            () -> AnomalyConfig.setInduceHighErrorRate(true),
+            () -> AnomalyConfig.setInduceHighRequestRateFromSingleIP(true),
+            () -> AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(true),
+            () -> AnomalyConfig.setInduceLowRequestRate(true)        );
 
         // Shuffle and activate anomalies
         Collections.shuffle(anomalies);
         for (int i = 0; i < numberOfAnomalies; i++) {
-            double severity = 1.0 + random.nextDouble() * 9.0; // Severity between 1 and 10
-            anomalies.get(i).accept(severity);
+            anomalies.get(i).run();
         }
 
-        // Log the activated anomalies and their severities
-        logger.info("Anomalies activated with varying severities.");
+        // Log the activated anomalies
+        logger.info("Anomalies activated.");
     }
 
     private static double getExponentialRandom(double mean) {
@@ -187,15 +202,20 @@ public class DataGenerator {
         AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
         AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
         AnomalyConfig.setInduceLowRequestRate(false);
-        // AnomalyConfig.setInduceDatabaseOutage(false); // Now handled separately
 
-        // Removed from here
-        // MySQLErrorLogGenerator.resetLowStorageWarningCount();
 
         logger.info("Anomaly configuration reset to normal.");
     }
 
     public static long getApplicationStartTime() {
         return applicationStartTime;
+    }
+
+    private static void scheduleAnomalyReenabling(ScheduledExecutorService executor) {
+        executor.schedule(() -> {
+            disableAnomalies = false;
+            logger.info("24-hour period elapsed. Anomalies are now re-enabled.");
+            scheduleAnomalyConfigUpdate(executor);
+        }, 24, TimeUnit.HOURS);
     }
 }
