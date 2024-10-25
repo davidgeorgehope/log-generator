@@ -266,12 +266,11 @@ public class LogGeneratorUtils {
         return 0.100 + (1.500 - 0.100) * random.nextDouble();
     }
 
-    public static int getLogsToGenerate() {
-        double meanRequestsPerSecond = 50;
+    public static int getLogsToGenerate(double meanRequestsPerSecond) {
         if (AnomalyConfig.isInduceHighVisitorRate()) {
-            meanRequestsPerSecond = 500;
+            meanRequestsPerSecond *= 10; // Increase by a factor, adjust as needed
         } else if (AnomalyConfig.isInduceLowRequestRate()) {
-            meanRequestsPerSecond = 1;
+            meanRequestsPerSecond *= 0.1; // Decrease by a factor, adjust as needed
         }
 
         // Parameters for the Pareto distribution

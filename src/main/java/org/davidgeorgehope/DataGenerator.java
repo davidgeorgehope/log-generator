@@ -24,6 +24,9 @@ public class DataGenerator {
     private static final Random random = new Random();
     private static boolean disableAnomalies = false; // Moved from local variable to static field
 
+    // Configuration parameter with default value
+    private static double meanRequestsPerSecond = 1; // Adjust this default value as needed
+
     public static void main(String[] args) {
         // Parse command-line arguments
 
@@ -35,6 +38,9 @@ public class DataGenerator {
                 scheduleAnomalyReenabling(executor);
                 logger.info("Anomaly generation and database outages are disabled for 24 hours.");
                 break;
+            } else if (arg.startsWith("--mean-requests-per-second=")) {
+                meanRequestsPerSecond = Double.parseDouble(arg.split("=")[1]);
+                logger.info("Set meanRequestsPerSecond to " + meanRequestsPerSecond);
             }
         }
 
@@ -61,7 +67,7 @@ public class DataGenerator {
 
         // Generate Nginx access logs continuously for frontend and backend
         executor.scheduleAtFixedRate(() -> {
-            int logsToGenerate = LogGeneratorUtils.getLogsToGenerate();
+            int logsToGenerate = LogGeneratorUtils.getLogsToGenerate(meanRequestsPerSecond);
             AccessLogGenerator.generateAccessLogs(
                 logsToGenerate,
                 nginxFrontEndLogDir + "/access.log",
@@ -71,7 +77,7 @@ public class DataGenerator {
         }, 0, 1, TimeUnit.SECONDS);
 
         executor.scheduleAtFixedRate(() -> {
-            int logsToGenerate = LogGeneratorUtils.getLogsToGenerate();
+            int logsToGenerate = LogGeneratorUtils.getLogsToGenerate(meanRequestsPerSecond);
             AccessLogGenerator.generateAccessLogs(
                 logsToGenerate,
                 nginxBackendLogDir + "/access.log",
