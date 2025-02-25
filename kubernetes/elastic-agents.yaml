@@ -1,0 +1,203 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-log-client
+  labels:
+    app: mysql-log-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-log-client
+  template:
+    metadata:
+      labels:
+        app: mysql-log-client
+    spec:
+      initContainers:
+      - name: elastic-agent-installer
+        image: davidhope1999/log-generator:latest
+        command: ["python3", "/app/elastic/install-elastic-agent.py"]
+        env:
+        - name: KIBANA_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: KIBANA_URL
+        - name: ELASTICSEARCH_USER
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: ELASTICSEARCH_USER
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: ELASTICSEARCH_PASSWORD
+        - name: VERIFY_SSL
+          value: "false"
+        - name: CLIENT_TYPE
+          value: "mysql"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/mysql
+      containers:
+      - name: mysql-log-generator
+        image: davidhope1999/log-generator:latest
+        command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=mysql"]
+        env:
+        - name: LOG_DIRECTORY
+          value: "/var/log/mysql"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_RATE
+          value: "10"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/mysql
+      volumes:
+      - name: log-volume
+        emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-backend-log-client
+  labels:
+    app: nginx-backend-log-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-backend-log-client
+  template:
+    metadata:
+      labels:
+        app: nginx-backend-log-client
+    spec:
+      initContainers:
+      - name: elastic-agent-installer
+        image: davidhope1999/log-generator:latest
+        command: ["python3", "/app/elastic/install-elastic-agent.py"]
+        env:
+        - name: KIBANA_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: KIBANA_URL
+        - name: ELASTICSEARCH_USER
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: ELASTICSEARCH_USER
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: ELASTICSEARCH_PASSWORD
+        - name: VERIFY_SSL
+          value: "false"
+        - name: CLIENT_TYPE
+          value: "nginx-backend"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/nginx_backend
+      containers:
+      - name: nginx-backend-log-generator
+        image: davidhope1999/log-generator:latest
+        command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=nginx-backend"]
+        env:
+        - name: LOG_DIRECTORY
+          value: "/var/log/nginx_backend"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_RATE
+          value: "10"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/nginx_backend
+      volumes:
+      - name: log-volume
+        emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-frontend-log-client
+  labels:
+    app: nginx-frontend-log-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-frontend-log-client
+  template:
+    metadata:
+      labels:
+        app: nginx-frontend-log-client
+    spec:
+      initContainers:
+      - name: elastic-agent-installer
+        image: davidhope1999/log-generator:latest
+        command: ["python3", "/app/elastic/install-elastic-agent.py"]
+        env:
+        - name: KIBANA_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: KIBANA_URL
+        - name: ELASTICSEARCH_USER
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: ELASTICSEARCH_USER
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: ELASTICSEARCH_PASSWORD
+        - name: VERIFY_SSL
+          value: "false"
+        - name: CLIENT_TYPE
+          value: "nginx-frontend"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/nginx_frontend
+      containers:
+      - name: nginx-frontend-log-generator
+        image: davidhope1999/log-generator:latest
+        command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=nginx-frontend"]
+        env:
+        - name: LOG_DIRECTORY
+          value: "/var/log/nginx_frontend"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: LOG_RATE
+          value: "10"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/nginx_frontend
+      volumes:
+      - name: log-volume
+        emptyDir: {} 

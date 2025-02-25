@@ -4,13 +4,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class MySQLLogClient {
     private static final Logger logger = LoggerFactory.getLogger(MySQLLogClient.class);
     private static String hostName = "localhost"; // Default to localhost if not specified
+    private static final String LOG_DIR = System.getenv().getOrDefault("LOG_DIRECTORY", "/var/log/mysql");
+    private static final String ERROR_LOG = "error.log";
+    private static final String SLOW_LOG = "mysql-slow.log";
 
     public static void main(String[] args) {
         if (args.length < 2) {
@@ -25,6 +35,18 @@ public class MySQLLogClient {
         if (args.length >= 3 && args[2] != null && !args[2].trim().isEmpty()) {
             hostName = args[2].trim();
             logger.info("Using host: " + hostName);
+        }
+
+        // Create log directory if it doesn't exist
+        try {
+            Path logDirPath = Paths.get(LOG_DIR);
+            if (!Files.exists(logDirPath)) {
+                Files.createDirectories(logDirPath);
+                logger.info("Created log directory: " + LOG_DIR);
+            }
+        } catch (IOException e) {
+            logger.error("Failed to create log directory: " + LOG_DIR, e);
+            System.exit(1);
         }
 
         // Start threads to read from each port
@@ -49,18 +71,32 @@ public class MySQLLogClient {
 
     private static void readFromPort(int port, boolean isError) {
         try {
-            logger.info("Connecting to " + hostName + ":" + port + " for " + (isError ? "error" : "stdout") + " logs");
+            logger.info("Connecting to " + hostName + ":" + port + " for " + (isError ? "error" : "slow query") + " logs");
+            String logFile = isError ? ERROR_LOG : SLOW_LOG;
+            Path logPath = Paths.get(LOG_DIR, logFile);
+            
+            logger.info("Writing logs to: " + logPath);
             
             while (!Thread.currentThread().isInterrupted()) {
                 try (Socket socket = new Socket(hostName, port);
-                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                     PrintWriter writer = new PrintWriter(new FileWriter(logPath.toString(), true))) {
                     
                     String line;
                     while ((line = reader.readLine()) != null) {
+                        // Format with timestamp for MySQL logs
+                        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                        String logEntry = timestamp + " " + line;
+                        
+                        // Write to file
+                        writer.println(logEntry);
+                        writer.flush();
+                        
+                        // Also output to console for debugging
                         if (isError) {
-                            System.err.println(line);
+                            System.err.println(logEntry);
                         } else {
-                            System.out.println(line);
+                            System.out.println(logEntry);
                         }
                     }
                 } catch (IOException e) {
