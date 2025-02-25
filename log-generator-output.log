@@ -1,0 +1,20 @@
+14:10:44.455 INFO  [main] org.davidgeorgehope.DataGenerator - MySQL error logs will be sent to port 9001
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - MySQL stdout logs will be sent to port 9002
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Nginx backend error logs will be sent to port 9003
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Nginx backend stdout logs will be sent to port 9004
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Nginx frontend error logs will be sent to port 9005
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Nginx frontend stdout logs will be sent to port 9006
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Nginx Ingress logs will be sent to port 9007
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Nginx Ingress error logs will be sent to port 9008
+14:10:44.456 INFO  [main] org.davidgeorgehope.DataGenerator - Log format set to NGINX Ingress
+14:10:44.458 INFO  [main] org.davidgeorgehope.DataGenerator - Set meanRequestsPerSecond to 2.0
+14:10:44.488 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9001
+14:10:44.488 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9002
+14:10:44.488 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9003
+14:10:44.488 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9004
+14:10:44.488 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9005
+14:10:44.488 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9006
+14:10:44.489 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9007
+14:10:44.489 INFO  [main] o.d.nginx.logs.LogSender - Initialized log server on port 9008
+Frontend Metrics Server started on port 8080
+Backend Metrics Server started on port 8081
