@@ -128,7 +128,7 @@ fi
 if [ "$IMAGE_TAG" != "latest" ]; then
   echo -e "\n${BLUE}Updating image tag to $IMAGE_TAG in deployment file...${NC}"
   TMP_FILE=$(mktemp)
-  sed "s|davidhope1999/log-generator:latest|davidhope1999/log-generator:$IMAGE_TAG|g" "$DEPLOYMENT_FILE" > "$TMP_FILE"
+  sed "s|djhope99/log-generator:latest|djhope99/log-generator:$IMAGE_TAG|g" "$DEPLOYMENT_FILE" > "$TMP_FILE"
   DEPLOYMENT_FILE="$TMP_FILE"
 fi
 
