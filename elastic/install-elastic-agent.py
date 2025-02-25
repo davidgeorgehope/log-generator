@@ -27,7 +27,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 KIBANA_URL = os.environ.get('KIBANA_URL')
 ELASTICSEARCH_USER = os.environ.get('ELASTICSEARCH_USER')
 ELASTICSEARCH_PASSWORD = os.environ.get('ELASTICSEARCH_PASSWORD')
-FLEET_URL = os.environ.get('FLEET_URL', KIBANA_URL)  # Use KIBANA_URL as fallback
+FLEET_URL = os.environ.get('FLEET_URL')  # Use KIBANA_URL as fallback
 VERIFY_SSL = os.environ.get('VERIFY_SSL', 'false').lower() == 'true'
 MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '5'))
 RETRY_DELAY = int(os.environ.get('RETRY_DELAY', '10'))
