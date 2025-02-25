@@ -287,14 +287,14 @@ def install_elastic_agent():
         # Download the Elastic agent
         subprocess.run([
             "curl", "-L", "-o", "elastic-agent.tar.gz",
-            "https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-8.16.1-linux-x86_64.tar.gz"
+            "https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-8.17.2-linux-x86_64.tar.gz"
         ], check=True)
         
         # Extract the agent
         subprocess.run(["tar", "xzvf", "elastic-agent.tar.gz"], check=True)
         
         # Install the agent - use a non-standard installation to avoid systemd dependencies
-        os.chdir("elastic-agent-8.16.1-linux-x86_64")
+        os.chdir("elastic-agent-8.17.2-linux-x86_64")
         
         # Instead of installing as a service, run in foreground in a background process
         command = [
