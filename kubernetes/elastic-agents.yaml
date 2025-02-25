@@ -16,7 +16,7 @@ spec:
     spec:
       initContainers:
       - name: elastic-agent-installer
-        image: davidhope1999/log-generator:latest
+        image: djhope99/log-generator:latest
         command: ["python3", "/app/elastic/install-elastic-agent.py"]
         env:
         - name: KIBANA_URL
@@ -43,7 +43,7 @@ spec:
           mountPath: /var/log/mysql
       containers:
       - name: mysql-log-generator
-        image: davidhope1999/log-generator:latest
+        image: djhope99/log-generator:latest
         command: ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=mysql"]
         env:
         - name: LOG_DIRECTORY
@@ -84,7 +84,7 @@ spec:
     spec:
       initContainers:
       - name: elastic-agent-installer
-        image: davidhope1999/log-generator:latest
+        image: djhope99/log-generator:latest
         command: ["python3", "/app/elastic/install-elastic-agent.py"]
         env:
         - name: KIBANA_URL
@@ -111,7 +111,7 @@ spec:
           mountPath: /var/log/nginx_backend
       containers:
       - name: nginx-backend-log-generator
-        image: davidhope1999/log-generator:latest
+        image: djhope99/log-generator:latest
         command: ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=nginx-backend"]
         env:
         - name: LOG_DIRECTORY
@@ -152,7 +152,7 @@ spec:
     spec:
       initContainers:
       - name: elastic-agent-installer
-        image: davidhope1999/log-generator:latest
+        image: djhope99/log-generator:latest
         command: ["python3", "/app/elastic/install-elastic-agent.py"]
         env:
         - name: KIBANA_URL
@@ -179,7 +179,7 @@ spec:
           mountPath: /var/log/nginx_frontend
       containers:
       - name: nginx-frontend-log-generator
-        image: davidhope1999/log-generator:latest
+        image: djhope99/log-generator:latest
         command: ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=nginx-frontend"]
         env:
         - name: LOG_DIRECTORY

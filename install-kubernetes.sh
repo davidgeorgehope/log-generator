@@ -17,8 +17,8 @@ NC='\033[0m' # No Color
 # Default values
 ELASTICSEARCH_USER="elastic"
 ELASTICSEARCH_PASSWORD="changeme"
-KIBANA_URL="https://kibana.example.com"
-ELASTICSEARCH_URL="https://elasticsearch.example.com"
+KIBANA_URL="https://nginx-test-2ada07.kb.us-central1.gcp.cloud.es.io"
+ELASTICSEARCH_URL="https://nginx-test-2ada07.es.us-central1.gcp.cloud.es.io"
 NAMESPACE="default"
 IMAGE_TAG="latest"
 
