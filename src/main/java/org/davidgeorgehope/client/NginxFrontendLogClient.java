@@ -10,15 +10,22 @@ import java.net.Socket;
 
 public class NginxFrontendLogClient {
     private static final Logger logger = LoggerFactory.getLogger(NginxFrontendLogClient.class);
+    private static String hostName = "localhost"; // Default to localhost if not specified
 
     public static void main(String[] args) {
         if (args.length < 2) {
-            System.err.println("Usage: java org.davidgeorgehope.client.NginxFrontendLogClient <error-port> <stdout-port>");
+            System.err.println("Usage: java org.davidgeorgehope.client.NginxFrontendLogClient <error-port> <stdout-port> [hostname]");
             System.exit(1);
         }
 
         int errorPort = Integer.parseInt(args[0]);
         int stdoutPort = Integer.parseInt(args[1]);
+        
+        // Use the hostname if provided
+        if (args.length >= 3 && args[2] != null && !args[2].trim().isEmpty()) {
+            hostName = args[2].trim();
+            logger.info("Using host: " + hostName);
+        }
 
         // Start threads to read from each port
         Thread errorThread = new Thread(() -> readFromPort(errorPort, true));
@@ -42,10 +49,10 @@ public class NginxFrontendLogClient {
 
     private static void readFromPort(int port, boolean isError) {
         try {
-            logger.info("Connecting to port " + port + " for " + (isError ? "error" : "stdout") + " logs");
+            logger.info("Connecting to " + hostName + ":" + port + " for " + (isError ? "error" : "stdout") + " logs");
             
             while (!Thread.currentThread().isInterrupted()) {
-                try (Socket socket = new Socket("localhost", port);
+                try (Socket socket = new Socket(hostName, port);
                      BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
                     
                     String line;
@@ -57,7 +64,7 @@ public class NginxFrontendLogClient {
                         }
                     }
                 } catch (IOException e) {
-                    logger.error("Error reading from port " + port + ", retrying in 5 seconds", e);
+                    logger.error("Error reading from " + hostName + ":" + port + ", retrying in 5 seconds", e);
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException ie) {
@@ -67,7 +74,7 @@ public class NginxFrontendLogClient {
                 }
             }
         } catch (Exception e) {
-            logger.error("Fatal error in client for port " + port, e);
+            logger.error("Fatal error in client for " + hostName + ":" + port, e);
         }
     }
 } 
