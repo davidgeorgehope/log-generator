@@ -27,6 +27,7 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 KIBANA_URL = os.environ.get('KIBANA_URL')
 ELASTICSEARCH_USER = os.environ.get('ELASTICSEARCH_USER')
 ELASTICSEARCH_PASSWORD = os.environ.get('ELASTICSEARCH_PASSWORD')
+FLEET_URL = os.environ.get('FLEET_URL', KIBANA_URL)  # Use KIBANA_URL as fallback
 VERIFY_SSL = os.environ.get('VERIFY_SSL', 'false').lower() == 'true'
 MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '5'))
 RETRY_DELAY = int(os.environ.get('RETRY_DELAY', '10'))
@@ -298,7 +299,7 @@ def install_elastic_agent():
         # Instead of installing as a service, run in foreground in a background process
         command = [
             "./elastic-agent", "install", 
-            f"--url={KIBANA_URL}", 
+            f"--url={FLEET_URL}", 
             f"--enrollment-token={enrollment_key}", 
             "--non-interactive",
             "--force"

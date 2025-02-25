@@ -34,6 +34,11 @@ spec:
             secretKeyRef:
               name: elasticsearch-credentials
               key: ELASTICSEARCH_PASSWORD
+        - name: FLEET_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: FLEET_URL
         - name: VERIFY_SSL
           value: "false"
         - name: CLIENT_TYPE
@@ -102,6 +107,11 @@ spec:
             secretKeyRef:
               name: elasticsearch-credentials
               key: ELASTICSEARCH_PASSWORD
+        - name: FLEET_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: FLEET_URL
         - name: VERIFY_SSL
           value: "false"
         - name: CLIENT_TYPE
@@ -170,6 +180,11 @@ spec:
             secretKeyRef:
               name: elasticsearch-credentials
               key: ELASTICSEARCH_PASSWORD
+        - name: FLEET_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: FLEET_URL
         - name: VERIFY_SSL
           value: "false"
         - name: CLIENT_TYPE

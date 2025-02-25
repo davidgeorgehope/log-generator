@@ -19,6 +19,7 @@ ELASTICSEARCH_USER="elastic"
 ELASTICSEARCH_PASSWORD="changeme"
 KIBANA_URL="https://nginx-test-2ada07.kb.us-central1.gcp.cloud.es.io"
 ELASTICSEARCH_URL="https://nginx-test-2ada07.es.us-central1.gcp.cloud.es.io"
+FLEET_URL="https://nginx-test-2ada07.fleet.us-central1.gcp.cloud.es.io"
 NAMESPACE="default"
 IMAGE_TAG="latest"
 
@@ -30,6 +31,7 @@ display_usage() {
   echo -e "  --es-password <password>     Elasticsearch password (default: changeme)"
   echo -e "  --kibana-url <url>           Kibana URL (default: https://kibana.example.com)"
   echo -e "  --es-url <url>               Elasticsearch URL (default: https://elasticsearch.example.com)"
+  echo -e "  --fleet-url <url>            Fleet URL (default: https://fleet.example.com)"
   echo -e "  --namespace <namespace>      Kubernetes namespace (default: default)"
   echo -e "  --image-tag <tag>            Docker image tag (default: latest)"
   echo -e "  --help                       Display this help message and exit"
@@ -56,6 +58,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --es-url)
       ELASTICSEARCH_URL="$2"
+      shift 2
+      ;;
+    --fleet-url)
+      FLEET_URL="$2"
       shift 2
       ;;
     --namespace)
@@ -104,6 +110,16 @@ if [[ "$NAMESPACE" != "default" ]]; then
   kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 fi
 
+# Check if secret exists and delete it if found
+echo -e "\n${BLUE}Checking for existing Elasticsearch credentials secret...${NC}"
+if kubectl get secret elasticsearch-credentials -n "$NAMESPACE" &>/dev/null; then
+  echo -e "${YELLOW}Found existing secret 'elasticsearch-credentials'. Deleting it...${NC}"
+  kubectl delete secret elasticsearch-credentials -n "$NAMESPACE"
+  echo -e "${GREEN}Existing secret deleted successfully.${NC}"
+else
+  echo -e "${BLUE}No existing secret found. Creating new secret...${NC}"
+fi
+
 # Create secret for Elasticsearch credentials
 echo -e "\n${BLUE}Creating Elasticsearch credentials secret...${NC}"
 kubectl create secret generic elasticsearch-credentials \
@@ -112,6 +128,7 @@ kubectl create secret generic elasticsearch-credentials \
   --from-literal=ELASTICSEARCH_PASSWORD="$ELASTICSEARCH_PASSWORD" \
   --from-literal=KIBANA_URL="$KIBANA_URL" \
   --from-literal=ELASTICSEARCH_URL="$ELASTICSEARCH_URL" \
+  --from-literal=FLEET_URL="$FLEET_URL" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo -e "${GREEN}Secret created successfully.${NC}"
