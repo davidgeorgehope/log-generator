@@ -44,7 +44,7 @@ spec:
       containers:
       - name: mysql-log-generator
         image: davidhope1999/log-generator:latest
-        command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=mysql"]
+        command: ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=mysql"]
         env:
         - name: LOG_DIRECTORY
           value: "/var/log/mysql"
@@ -112,7 +112,7 @@ spec:
       containers:
       - name: nginx-backend-log-generator
         image: davidhope1999/log-generator:latest
-        command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=nginx-backend"]
+        command: ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=nginx-backend"]
         env:
         - name: LOG_DIRECTORY
           value: "/var/log/nginx_backend"
@@ -180,7 +180,7 @@ spec:
       containers:
       - name: nginx-frontend-log-generator
         image: davidhope1999/log-generator:latest
-        command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=nginx-frontend"]
+        command: ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar", "--spring.profiles.active=nginx-frontend"]
         env:
         - name: LOG_DIRECTORY
           value: "/var/log/nginx_frontend"

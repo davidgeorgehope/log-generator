@@ -3,7 +3,7 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 # Copy the compiled JAR file
-COPY target/log-generator-0.0.1-SNAPSHOT.jar /app/app.jar
+COPY target/log-generator-0.0.1-SNAPSHOT.jar /app/log-generator-0.0.1-SNAPSHOT.jar
 
 # Copy Elastic agent installation files
 COPY elastic/ /app/elastic/
@@ -25,4 +25,4 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN chmod +x /app/elastic/install-elastic-agent.py
 
 # The command will be overridden by Kubernetes
-CMD ["java", "-jar", "/app/app.jar"] 
+CMD ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar"] 
