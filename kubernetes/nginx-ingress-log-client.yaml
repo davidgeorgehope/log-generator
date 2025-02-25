@@ -4,6 +4,7 @@ metadata:
   name: nginx-ingress-log-client
   labels:
     app: nginx-ingress-log-client
+    app.kubernetes.io/name: ingress-nginx
 spec:
   replicas: 1
   selector:
@@ -13,6 +14,7 @@ spec:
     metadata:
       labels:
         app: nginx-ingress-log-client
+        app.kubernetes.io/name: ingress-nginx
     spec:
       containers:
       - name: nginx-ingress-log-client
