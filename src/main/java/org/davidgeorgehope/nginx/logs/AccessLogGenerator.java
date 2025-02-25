@@ -16,7 +16,11 @@ public class AccessLogGenerator {
     }
 
     public static void generateAccessLogs(int logsToGenerate, String filePath, boolean isFrontend, UserSessionManager userSessionManager, int port) {
-        try (FileWriter writer = new FileWriter(filePath, true)) {
+        // If port is specified, send logs to port only, otherwise write to file
+        boolean usePortLogging = port > 0;
+        
+        // Only open file writer if we're not using port logging
+        try (FileWriter writer = usePortLogging ? null : new FileWriter(filePath, true)) {
             for (int i = 0; i < logsToGenerate; i++) {
                 AccessLogEntry entry;
                 if (AnomalyConfig.isInduceDatabaseOutage()) {
@@ -26,11 +30,12 @@ public class AccessLogGenerator {
                     entry = AccessLogEntry.createRandomEntry(isFrontend, userSessionManager);
                 }
                 String logEntry = entry.toString();
-                writer.write(logEntry);
-
-                // Send to TCP port if configured
-                if (port > 0) {
+                
+                // Send to TCP port if configured, otherwise write to file
+                if (usePortLogging) {
                     LogSender.sendLog(port, logEntry);
+                } else {
+                    writer.write(logEntry);
                 }
 
                 // If inducing high visitor rate anomaly
@@ -39,7 +44,9 @@ public class AccessLogGenerator {
                 }
             }
         } catch (IOException e) {
-            logger.error("Error writing to access log file: " + filePath, e);
+            if (!usePortLogging) {
+                logger.error("Error writing to access log file: " + filePath, e);
+            }
         }
     }
 }

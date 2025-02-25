@@ -15,7 +15,10 @@ public class ErrorLogGenerator {
     }
 
     public static void generateErrorLogs(int logsToGenerate, String filePath, boolean isFrontend, int port) {
-        try (FileWriter writer = new FileWriter(filePath, true)) {
+        // If port is specified, send logs to port only, otherwise write to file
+        boolean usePortLogging = port > 0;
+        
+        try (FileWriter writer = usePortLogging ? null : new FileWriter(filePath, true)) {
             int actualLogsCount = logsToGenerate;
 
             if (AnomalyConfig.isInduceDatabaseOutage()) {
@@ -26,15 +29,18 @@ public class ErrorLogGenerator {
             for (int i = 0; i < actualLogsCount; i++) {
                 ErrorLogEntry entry = ErrorLogEntry.createRandomEntry(isFrontend);
                 String logEntry = entry.toString();
-                writer.write(logEntry);
                 
-                // Send to TCP port if configured
-                if (port > 0) {
+                // Send to TCP port if configured, otherwise write to file
+                if (usePortLogging) {
                     LogSender.sendLog(port, logEntry);
+                } else {
+                    writer.write(logEntry);
                 }
             }
         } catch (IOException e) {
-            logger.error("Error writing to error log file: " + filePath, e);
+            if (!usePortLogging) {
+                logger.error("Error writing to error log file: " + filePath, e);
+            }
         }
     }
 }

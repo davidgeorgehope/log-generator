@@ -47,18 +47,24 @@ public class MySQLErrorLogGenerator {
             }
         }
 
-        try (FileWriter writer = new FileWriter(filePath, true)) {
+        // If port is specified, send logs to port only, otherwise write to file
+        boolean usePortLogging = port > 0;
+
+        try (FileWriter writer = usePortLogging ? null : new FileWriter(filePath, true)) {
             for (MySQLErrorLogEntry entry : entries) {
                 String logEntry = entry.toString();
-                writer.write(logEntry);
                 
-                // Send to TCP port if configured
-                if (port > 0) {
+                // Send to TCP port if configured, otherwise write to file
+                if (usePortLogging) {
                     LogSender.sendLog(port, logEntry);
+                } else {
+                    writer.write(logEntry);
                 }
             }
         } catch (IOException e) {
-            logger.error("Error writing to MySQL error log file: " + filePath, e);
+            if (!usePortLogging) {
+                logger.error("Error writing to MySQL error log file: " + filePath, e);
+            }
         }
     }
 

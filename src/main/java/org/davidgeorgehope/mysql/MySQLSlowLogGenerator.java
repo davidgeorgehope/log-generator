@@ -15,21 +15,27 @@ public class MySQLSlowLogGenerator {
     }
 
     public static void generateSlowLogs(int logsCount, String filePath, int port) {
-        try (FileWriter writer = new FileWriter(filePath, true)) {
+        // If port is specified, send logs to port only, otherwise write to file
+        boolean usePortLogging = port > 0;
+        
+        try (FileWriter writer = usePortLogging ? null : new FileWriter(filePath, true)) {
             for (int i = 0; i < logsCount; i++) {
                 String logEntry = MySQLSlowLogEntry.createRandomEntry().toString();
-                writer.write(logEntry);
                 
-                // Send to TCP port if configured
-                if (port > 0) {
+                // Send to TCP port if configured, otherwise write to file
+                if (usePortLogging) {
                     LogSender.sendLog(port, logEntry);
+                } else {
+                    writer.write(logEntry);
                 }
                 
                 // Introduce a slight delay if desired
                 // Thread.sleep(50);
             }
         } catch (IOException e) {
-            logger.error("Error writing to MySQL slow log file: " + filePath, e);
+            if (!usePortLogging) {
+                logger.error("Error writing to MySQL slow log file: " + filePath, e);
+            }
         }
     }
 }

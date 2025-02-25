@@ -58,9 +58,9 @@ public class MySQLLogClient {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         if (isError) {
-                            System.err.println("[MySQL " + (isError ? "ERROR" : "STDOUT") + "] " + line);
+                            System.err.println(line);
                         } else {
-                            System.out.println("[MySQL " + (isError ? "ERROR" : "STDOUT") + "] " + line);
+                            System.out.println(line);
                         }
                     }
                 } catch (IOException e) {
