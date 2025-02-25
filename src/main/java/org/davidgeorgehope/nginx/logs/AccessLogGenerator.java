@@ -12,6 +12,10 @@ public class AccessLogGenerator {
     private static final Logger logger = LoggerFactory.getLogger(AccessLogGenerator.class);
 
     public static void generateAccessLogs(int logsToGenerate, String filePath, boolean isFrontend, UserSessionManager userSessionManager) {
+        generateAccessLogs(logsToGenerate, filePath, isFrontend, userSessionManager, -1);
+    }
+
+    public static void generateAccessLogs(int logsToGenerate, String filePath, boolean isFrontend, UserSessionManager userSessionManager, int port) {
         try (FileWriter writer = new FileWriter(filePath, true)) {
             for (int i = 0; i < logsToGenerate; i++) {
                 AccessLogEntry entry;
@@ -21,7 +25,13 @@ public class AccessLogGenerator {
                 } else {
                     entry = AccessLogEntry.createRandomEntry(isFrontend, userSessionManager);
                 }
-                writer.write(entry.toString());
+                String logEntry = entry.toString();
+                writer.write(logEntry);
+
+                // Send to TCP port if configured
+                if (port > 0) {
+                    LogSender.sendLog(port, logEntry);
+                }
 
                 // If inducing high visitor rate anomaly
                 if (AnomalyConfig.isInduceHighVisitorRate()) {
@@ -29,7 +39,7 @@ public class AccessLogGenerator {
                 }
             }
         } catch (IOException e) {
-            logger.error("Error writing access log", e);
+            logger.error("Error writing to access log file: " + filePath, e);
         }
     }
 }

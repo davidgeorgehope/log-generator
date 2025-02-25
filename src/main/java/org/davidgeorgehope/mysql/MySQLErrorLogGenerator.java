@@ -2,6 +2,7 @@ package org.davidgeorgehope.mysql;
 
 import org.davidgeorgehope.AnomalyConfig;
 import org.davidgeorgehope.DataGenerator;
+import org.davidgeorgehope.nginx.logs.LogSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +23,10 @@ public class MySQLErrorLogGenerator {
     private static int warningThreshold = ThreadLocalRandom.current().nextInt(8, 15); // Random threshold between 8 and 14
 
     public static void generateErrorLogs(int logsToGenerate, String filePath, ScheduledExecutorService executor, boolean anomaliesDisabled) {
+        generateErrorLogs(logsToGenerate, filePath, executor, anomaliesDisabled, -1);
+    }
+
+    public static void generateErrorLogs(int logsToGenerate, String filePath, ScheduledExecutorService executor, boolean anomaliesDisabled, int port) {
         List<MySQLErrorLogEntry> entries = new ArrayList<>();
 
         for (int i = 0; i < logsToGenerate; i++) {
@@ -38,22 +43,22 @@ public class MySQLErrorLogGenerator {
             if (!anomaliesDisabled && lowStorageWarningCount >= warningThreshold && !AnomalyConfig.isInduceDatabaseOutage()) {
                 AnomalyConfig.setInduceDatabaseOutage(true);
                 logger.info("Database outage induced due to low storage warnings.");
-
-                // Schedule reset of the database outage
                 scheduleDatabaseOutageReset(executor);
-
-                // Reset warning count and set a new random threshold for next time
-                lowStorageWarningCount = 0;
-                warningThreshold = ThreadLocalRandom.current().nextInt(8, 15);
             }
         }
 
         try (FileWriter writer = new FileWriter(filePath, true)) {
             for (MySQLErrorLogEntry entry : entries) {
-                writer.write(entry.toString());
+                String logEntry = entry.toString();
+                writer.write(logEntry);
+                
+                // Send to TCP port if configured
+                if (port > 0) {
+                    LogSender.sendLog(port, logEntry);
+                }
             }
         } catch (IOException e) {
-            logger.error("Error writing MySQL error log", e);
+            logger.error("Error writing to MySQL error log file: " + filePath, e);
         }
     }
 

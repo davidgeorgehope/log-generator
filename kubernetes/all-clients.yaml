@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-log-client
+  labels:
+    app: mysql-log-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-log-client
+  template:
+    metadata:
+      labels:
+        app: mysql-log-client
+    spec:
+      containers:
+      - name: mysql-log-client
+        image: djhope99/log-generator:latest
+        imagePullPolicy: Always
+        command:
+        - java
+        - -cp
+        - /app/log-generator-0.0.1-SNAPSHOT.jar
+        - org.davidgeorgehope.client.MySQLLogClient
+        - "$(MYSQL_ERROR_PORT)"
+        - "$(MYSQL_STDOUT_PORT)"
+        - "$(LOG_GENERATOR_SERVICE)"
+        env:
+        - name: MYSQL_ERROR_PORT
+          value: "9001"
+        - name: MYSQL_STDOUT_PORT
+          value: "9002"
+        - name: LOG_GENERATOR_SERVICE
+          value: "log-generator-service"
+        resources:
+          limits:
+            cpu: "0.3"
+            memory: "256Mi"
+          requests:
+            cpu: "0.1"
+            memory: "128Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-backend-log-client
+  labels:
+    app: nginx-backend-log-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-backend-log-client
+  template:
+    metadata:
+      labels:
+        app: nginx-backend-log-client
+    spec:
+      containers:
+      - name: nginx-backend-log-client
+        image: djhope99/log-generator:latest
+        imagePullPolicy: Always
+        command:
+        - java
+        - -cp
+        - /app/log-generator-0.0.1-SNAPSHOT.jar
+        - org.davidgeorgehope.client.NginxBackendLogClient
+        - "$(NGINX_BACKEND_ERROR_PORT)"
+        - "$(NGINX_BACKEND_STDOUT_PORT)"
+        - "$(LOG_GENERATOR_SERVICE)"
+        env:
+        - name: NGINX_BACKEND_ERROR_PORT
+          value: "9003"
+        - name: NGINX_BACKEND_STDOUT_PORT
+          value: "9004"
+        - name: LOG_GENERATOR_SERVICE
+          value: "log-generator-service"
+        resources:
+          limits:
+            cpu: "0.3"
+            memory: "256Mi"
+          requests:
+            cpu: "0.1"
+            memory: "128Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-frontend-log-client
+  labels:
+    app: nginx-frontend-log-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-frontend-log-client
+  template:
+    metadata:
+      labels:
+        app: nginx-frontend-log-client
+    spec:
+      containers:
+      - name: nginx-frontend-log-client
+        image: djhope99/log-generator:latest
+        imagePullPolicy: Always
+        command:
+        - java
+        - -cp
+        - /app/log-generator-0.0.1-SNAPSHOT.jar
+        - org.davidgeorgehope.client.NginxFrontendLogClient
+        - "$(NGINX_FRONTEND_ERROR_PORT)"
+        - "$(NGINX_FRONTEND_STDOUT_PORT)"
+        - "$(LOG_GENERATOR_SERVICE)"
+        env:
+        - name: NGINX_FRONTEND_ERROR_PORT
+          value: "9005"
+        - name: NGINX_FRONTEND_STDOUT_PORT
+          value: "9006"
+        - name: LOG_GENERATOR_SERVICE
+          value: "log-generator-service"
+        resources:
+          limits:
+            cpu: "0.3"
+            memory: "256Mi"
+          requests:
+            cpu: "0.1"
+            memory: "128Mi" 

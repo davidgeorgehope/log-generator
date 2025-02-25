@@ -5,6 +5,7 @@ import org.davidgeorgehope.mysql.MySQLGeneralLogGenerator;
 import org.davidgeorgehope.mysql.MySQLSlowLogGenerator;
 import org.davidgeorgehope.nginx.logs.AccessLogGenerator;
 import org.davidgeorgehope.nginx.logs.ErrorLogGenerator;
+import org.davidgeorgehope.nginx.logs.LogSender;
 import org.davidgeorgehope.nginx.metrics.BackendMetricsServer;
 import org.davidgeorgehope.nginx.metrics.FrontendMetricsServer;
 import org.slf4j.Logger;
@@ -27,6 +28,15 @@ public class DataGenerator {
     // Configuration parameter with default value
     private static double meanRequestsPerSecond = 1; // Adjust this default value as needed
 
+    // Port configurations for log streaming
+    private static int mysqlErrorPort = -1;
+    private static int mysqlStdoutPort = -1;
+    private static int nginxBackendErrorPort = -1;
+    private static int nginxBackendStdoutPort = -1;
+    private static int nginxFrontendErrorPort = -1;
+    private static int nginxFrontendStdoutPort = -1;
+    private static boolean enablePortStreaming = false;
+
     public static void main(String[] args) {
         // Parse command-line arguments
 
@@ -37,11 +47,44 @@ public class DataGenerator {
                 disableAnomalies = true;
                 scheduleAnomalyReenabling(executor);
                 logger.info("Anomaly generation and database outages are disabled for 24 hours.");
-                break;
             } else if (arg.startsWith("--mean-requests-per-second=")) {
                 meanRequestsPerSecond = Double.parseDouble(arg.split("=")[1]);
                 logger.info("Set meanRequestsPerSecond to " + meanRequestsPerSecond);
+            } else if (arg.startsWith("--mysql-error-port=")) {
+                mysqlErrorPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("MySQL error logs will be sent to port " + mysqlErrorPort);
+                enablePortStreaming = true;
+            } else if (arg.startsWith("--mysql-stdout-port=")) {
+                mysqlStdoutPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("MySQL stdout logs will be sent to port " + mysqlStdoutPort);
+                enablePortStreaming = true;
+            } else if (arg.startsWith("--nginx-backend-error-port=")) {
+                nginxBackendErrorPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("Nginx backend error logs will be sent to port " + nginxBackendErrorPort);
+                enablePortStreaming = true;
+            } else if (arg.startsWith("--nginx-backend-stdout-port=")) {
+                nginxBackendStdoutPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("Nginx backend stdout logs will be sent to port " + nginxBackendStdoutPort);
+                enablePortStreaming = true;
+            } else if (arg.startsWith("--nginx-frontend-error-port=")) {
+                nginxFrontendErrorPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("Nginx frontend error logs will be sent to port " + nginxFrontendErrorPort);
+                enablePortStreaming = true;
+            } else if (arg.startsWith("--nginx-frontend-stdout-port=")) {
+                nginxFrontendStdoutPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("Nginx frontend stdout logs will be sent to port " + nginxFrontendStdoutPort);
+                enablePortStreaming = true;
             }
+        }
+
+        // Initialize TCP log senders if port streaming is enabled
+        if (enablePortStreaming) {
+            if (mysqlErrorPort > 0) LogSender.initializePort(mysqlErrorPort);
+            if (mysqlStdoutPort > 0) LogSender.initializePort(mysqlStdoutPort);
+            if (nginxBackendErrorPort > 0) LogSender.initializePort(nginxBackendErrorPort);
+            if (nginxBackendStdoutPort > 0) LogSender.initializePort(nginxBackendStdoutPort);
+            if (nginxFrontendErrorPort > 0) LogSender.initializePort(nginxFrontendErrorPort);
+            if (nginxFrontendStdoutPort > 0) LogSender.initializePort(nginxFrontendStdoutPort);
         }
 
         // Standard log directories
@@ -72,7 +115,8 @@ public class DataGenerator {
                 logsToGenerate,
                 nginxFrontEndLogDir + "/access.log",
                 true,
-                userSessionManager
+                userSessionManager,
+                nginxFrontendStdoutPort
             );
         }, 0, 1, TimeUnit.SECONDS);
 
@@ -82,7 +126,8 @@ public class DataGenerator {
                 logsToGenerate,
                 nginxBackendLogDir + "/access.log",
                 false,
-                userSessionManager
+                userSessionManager,
+                nginxBackendStdoutPort
             );
         }, 0, 1, TimeUnit.SECONDS);
 
@@ -91,7 +136,8 @@ public class DataGenerator {
             ErrorLogGenerator.generateErrorLogs(
                 1,
                 nginxFrontEndLogDir + "/error.log",
-                true
+                true,
+                nginxFrontendErrorPort
             );
         }, 0, 5, TimeUnit.SECONDS);
 
@@ -99,7 +145,8 @@ public class DataGenerator {
             ErrorLogGenerator.generateErrorLogs(
                 1,
                 nginxBackendLogDir + "/error.log",
-                false
+                false,
+                nginxBackendErrorPort
             );
         }, 0, 5, TimeUnit.SECONDS);
 
@@ -109,21 +156,24 @@ public class DataGenerator {
                 1,
                 mysqlLogDir + "/error.log",
                 executor,
-                disableAnomalies // Now refers to the static field
+                disableAnomalies,
+                mysqlErrorPort
             );
         }, 0, 10, TimeUnit.SECONDS);
 
         executor.scheduleAtFixedRate(() -> {
             MySQLSlowLogGenerator.generateSlowLogs(
                 1,
-                mysqlLogDir + "/mysql-slow.log"
+                mysqlLogDir + "/mysql-slow.log",
+                mysqlStdoutPort
             );
         }, 0, 15, TimeUnit.SECONDS);
 
         executor.scheduleAtFixedRate(() -> {
             MySQLGeneralLogGenerator.generateGeneralLogs(
                 1,
-                mysqlLogDir + "/mysql.log"
+                mysqlLogDir + "/mysql.log",
+                mysqlStdoutPort
             );
         }, 0, 5, TimeUnit.SECONDS);
 
@@ -148,6 +198,11 @@ public class DataGenerator {
                 logger.error("Error during executor shutdown", e);
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
+            }
+            
+            // Shutdown the LogSender
+            if (enablePortStreaming) {
+                LogSender.shutdown();
             }
         }));
     }

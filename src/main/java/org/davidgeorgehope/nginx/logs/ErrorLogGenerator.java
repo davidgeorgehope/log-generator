@@ -10,9 +10,13 @@ import java.util.concurrent.ThreadLocalRandom;
 public class ErrorLogGenerator {
     private static final Logger logger = LoggerFactory.getLogger(ErrorLogGenerator.class);
 
-    public static void generateErrorLogs(int logsCount, String filePath, boolean isFrontend) {
+    public static void generateErrorLogs(int logsToGenerate, String filePath, boolean isFrontend) {
+        generateErrorLogs(logsToGenerate, filePath, isFrontend, -1);
+    }
+
+    public static void generateErrorLogs(int logsToGenerate, String filePath, boolean isFrontend, int port) {
         try (FileWriter writer = new FileWriter(filePath, true)) {
-            int actualLogsCount = logsCount;
+            int actualLogsCount = logsToGenerate;
 
             if (AnomalyConfig.isInduceDatabaseOutage()) {
                 // Increase error logs during database outage
@@ -20,11 +24,17 @@ public class ErrorLogGenerator {
             }
 
             for (int i = 0; i < actualLogsCount; i++) {
-                String logEntry = ErrorLogEntry.createRandomEntry(isFrontend).toString();
+                ErrorLogEntry entry = ErrorLogEntry.createRandomEntry(isFrontend);
+                String logEntry = entry.toString();
                 writer.write(logEntry);
+                
+                // Send to TCP port if configured
+                if (port > 0) {
+                    LogSender.sendLog(port, logEntry);
+                }
             }
         } catch (IOException e) {
-            logger.error("Error writing error log", e);
+            logger.error("Error writing to error log file: " + filePath, e);
         }
     }
 }
