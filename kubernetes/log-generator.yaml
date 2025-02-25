@@ -28,6 +28,8 @@ spec:
         - --nginx-backend-stdout-port=9004
         - --nginx-frontend-error-port=9005
         - --nginx-frontend-stdout-port=9006
+        - --nginx-ingress-port=9007
+        - --nginx-ingress-error-port=9008
         ports:
         - containerPort: 9001
           name: mysql-error
@@ -41,6 +43,10 @@ spec:
           name: nginx-fe-error
         - containerPort: 9006
           name: nginx-fe-stdout
+        - containerPort: 9007
+          name: nginx-ingress
+        - containerPort: 9008
+          name: nginx-ing-error
         resources:
           limits:
             cpu: "1.0"
@@ -80,4 +86,10 @@ spec:
     targetPort: 9005
   - name: nginx-fe-stdout
     port: 9006
-    targetPort: 9006 
+    targetPort: 9006
+  - name: nginx-ingress
+    port: 9007
+    targetPort: 9007
+  - name: nginx-ing-error
+    port: 9008
+    targetPort: 9008 

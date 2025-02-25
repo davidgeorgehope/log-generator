@@ -5,6 +5,8 @@ import org.davidgeorgehope.mysql.MySQLGeneralLogGenerator;
 import org.davidgeorgehope.mysql.MySQLSlowLogGenerator;
 import org.davidgeorgehope.nginx.logs.AccessLogGenerator;
 import org.davidgeorgehope.nginx.logs.ErrorLogGenerator;
+import org.davidgeorgehope.nginx.logs.IngressAccessLogGenerator;
+import org.davidgeorgehope.nginx.logs.IngressErrorLogGenerator;
 import org.davidgeorgehope.nginx.logs.LogSender;
 import org.davidgeorgehope.nginx.metrics.BackendMetricsServer;
 import org.davidgeorgehope.nginx.metrics.FrontendMetricsServer;
@@ -36,6 +38,12 @@ public class DataGenerator {
     private static int nginxFrontendErrorPort = -1;
     private static int nginxFrontendStdoutPort = -1;
     private static boolean enablePortStreaming = false;
+    
+    // NGINX Ingress configuration
+    private static boolean enableIngressLogs = true; // Changed default to true
+    private static int nginxIngressPort = -1;
+    private static int nginxIngressErrorPort = -1; // New port for Ingress error logs
+    private static String logFormat = "standard"; // Can be "standard" or "ingress"
 
     public static void main(String[] args) {
         // Parse command-line arguments
@@ -74,6 +82,25 @@ public class DataGenerator {
                 nginxFrontendStdoutPort = Integer.parseInt(arg.split("=")[1]);
                 logger.info("Nginx frontend stdout logs will be sent to port " + nginxFrontendStdoutPort);
                 enablePortStreaming = true;
+            } else if (arg.startsWith("--nginx-ingress-port=")) {
+                nginxIngressPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("Nginx Ingress logs will be sent to port " + nginxIngressPort);
+                enablePortStreaming = true;
+                enableIngressLogs = true;
+            } else if (arg.startsWith("--nginx-ingress-error-port=")) {
+                nginxIngressErrorPort = Integer.parseInt(arg.split("=")[1]);
+                logger.info("Nginx Ingress error logs will be sent to port " + nginxIngressErrorPort);
+                enablePortStreaming = true;
+                enableIngressLogs = true;
+            } else if (arg.startsWith("--log-format=")) {
+                logFormat = arg.split("=")[1];
+                if (logFormat.equalsIgnoreCase("ingress")) {
+                    enableIngressLogs = true;
+                    logger.info("Log format set to NGINX Ingress");
+                } else {
+                    logFormat = "standard";
+                    logger.info("Log format set to standard");
+                }
             }
         }
 
@@ -85,18 +112,21 @@ public class DataGenerator {
             if (nginxBackendStdoutPort > 0) LogSender.initializePort(nginxBackendStdoutPort);
             if (nginxFrontendErrorPort > 0) LogSender.initializePort(nginxFrontendErrorPort);
             if (nginxFrontendStdoutPort > 0) LogSender.initializePort(nginxFrontendStdoutPort);
+            if (nginxIngressPort > 0) LogSender.initializePort(nginxIngressPort);
+            if (nginxIngressErrorPort > 0) LogSender.initializePort(nginxIngressErrorPort);
         }
 
         // Standard log directories
         String nginxFrontEndLogDir = "/var/log/nginx_frontend";
         String nginxBackendLogDir = "/var/log/nginx_backend";
         String mysqlLogDir = "/var/log/mysql";
+        String nginxIngressLogDir = "/var/log/nginx_ingress";
 
         // Create directories if they don't exist (requires appropriate permissions)
         new File(nginxFrontEndLogDir).mkdirs();
         new File(nginxBackendLogDir).mkdirs();
         new File(mysqlLogDir).mkdirs();
-
+        new File(nginxIngressLogDir).mkdirs();
 
         UserSessionManager userSessionManager = new UserSessionManager();
 
@@ -108,7 +138,9 @@ public class DataGenerator {
             resetAnomalyConfig();
         }
 
-        // Generate Nginx access logs continuously for frontend and backend
+        // Generate both standard NGINX access logs and Ingress logs
+        
+        // Standard NGINX access logs generation
         executor.scheduleAtFixedRate(() -> {
             int logsToGenerate = LogGeneratorUtils.getLogsToGenerate(meanRequestsPerSecond);
             AccessLogGenerator.generateAccessLogs(
@@ -130,6 +162,30 @@ public class DataGenerator {
                 nginxBackendStdoutPort
             );
         }, 0, 1, TimeUnit.SECONDS);
+        
+        // Generate NGINX Ingress logs if enabled
+        if (enableIngressLogs) {
+            executor.scheduleAtFixedRate(() -> {
+                int logsToGenerate = LogGeneratorUtils.getLogsToGenerate(meanRequestsPerSecond);
+                IngressAccessLogGenerator.generateIngressLogs(
+                    logsToGenerate,
+                    nginxIngressLogDir + "/ingress-access.log",
+                    true,  // Frontend
+                    userSessionManager,
+                    nginxIngressPort
+                );
+            }, 0, 1, TimeUnit.SECONDS);
+            
+            // Generate NGINX Ingress error logs
+            executor.scheduleAtFixedRate(() -> {
+                IngressErrorLogGenerator.generateIngressErrorLogs(
+                    1,
+                    nginxIngressLogDir + "/ingress-error.log",
+                    true,  // Frontend
+                    nginxIngressErrorPort
+                );
+            }, 0, 5, TimeUnit.SECONDS);
+        }
 
         // Generate Nginx error logs less frequently for frontend and backend
         executor.scheduleAtFixedRate(() -> {
@@ -255,8 +311,6 @@ public class DataGenerator {
         logger.info("Anomalies activated.");
     }
 
-
-
     private static double getTruncatedExponentialRandom(double mean, double maxDelay) {
         double u = random.nextDouble();
         double Fmax = 1 - Math.exp(-maxDelay / mean);
@@ -271,7 +325,6 @@ public class DataGenerator {
         AnomalyConfig.setInduceHighRequestRateFromSingleIP(false);
         AnomalyConfig.setInduceHighDistinctURLsFromSingleIP(false);
         AnomalyConfig.setInduceLowRequestRate(false);
-
 
         logger.info("Anomaly configuration reset to normal.");
     }
