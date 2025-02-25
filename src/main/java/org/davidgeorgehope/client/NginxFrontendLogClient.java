@@ -87,8 +87,7 @@ public class NginxFrontendLogClient {
                         // Format with timestamp for Nginx logs if it's an error log
                         String logEntry;
                         if (isError) {
-                            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"));
-                            logEntry = timestamp + " [error] " + line;
+                            logEntry = line;
                         } else {
                             // For access logs, format like a normal Nginx access log
                             logEntry = line;

@@ -84,9 +84,7 @@ public class MySQLLogClient {
                     
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        // Format with timestamp for MySQL logs
-                        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                        String logEntry = timestamp + " " + line;
+                         String logEntry = line;
                         
                         // Write to file
                         writer.println(logEntry);
