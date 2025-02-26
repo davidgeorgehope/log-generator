@@ -113,26 +113,6 @@ if ! command_exists python3; then
   exit 1
 fi
 
-# Check for Python dependencies
-echo -e "\n${BLUE}Checking Python dependencies...${NC}"
-PYTHON_DEPS_OK=false
-if python3 -c "import pkg_resources; pkg_resources.require(['requests', 'kubernetes'])" 2>/dev/null; then
-  PYTHON_DEPS_OK=true
-fi
-
-if [ "$PYTHON_DEPS_OK" = false ]; then
-  echo -e "${YELLOW}Installing required Python packages...${NC}"
-  python3 -m pip install requests kubernetes
-  
-  # Verify installation was successful
-  if ! python3 -c "import requests, kubernetes" 2>/dev/null; then
-    echo -e "${RED}Failed to install required Python packages. Please install them manually:${NC}"
-    echo -e "${YELLOW}pip install requests kubernetes${NC}"
-    exit 1
-  fi
-  echo -e "${GREEN}Python dependencies installed successfully.${NC}"
-fi
-
 # Make sure the Python script is executable
 SCRIPT_PATH="./install-elastic-agent.py"
 if [[ ! -x "$SCRIPT_PATH" ]]; then
