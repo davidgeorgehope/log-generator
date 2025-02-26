@@ -298,14 +298,11 @@ def setup_logging_directories():
     logger.info(f"Created logging directories for {CLIENT_TYPE}")
 
 def setup_config_directories():
-    """Make sure the config directories exist."""
-    # Create agent_policies directory if it doesn't exist
-    os.makedirs('/app/elastic/agent_policies', exist_ok=True)
-    
-    # Create integrations directory if it doesn't exist
-    os.makedirs('/app/elastic/integrations', exist_ok=True)
-    
-    logger.info("Created configuration directories")
+    """Make sure the enrollment token directory exists."""
+    # We only need to create the directory for the enrollment token
+    # The integration and policy files are already in the container image
+    os.makedirs('/app/elastic-config', exist_ok=True)
+    logger.info("Created enrollment token directory at /app/elastic-config")
 
 def main():
     """Main function to setup Elastic agent policies and integrations."""
@@ -338,9 +335,9 @@ def main():
         logger.info(f"Elastic agent policy and integration setup completed successfully for {CLIENT_TYPE}")
         logger.info(f"Generated enrollment token: {enrollment_token}")
         # Writing the token to a file that can be mounted in the sidecar container
-        with open('/app/elastic/enrollment_token.txt', 'w') as f:
+        with open('/app/elastic-config/enrollment_token.txt', 'w') as f:
             f.write(enrollment_token)
-        logger.info("Enrollment token written to /app/elastic/enrollment_token.txt")
+        logger.info("Enrollment token written to /app/elastic-config/enrollment_token.txt")
     else:
         logger.error(f"Failed to generate enrollment token for {CLIENT_TYPE}")
         sys.exit(1)

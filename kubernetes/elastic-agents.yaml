@@ -47,7 +47,7 @@ spec:
         - name: log-volume
           mountPath: /var/log/mysql
         - name: elastic-config
-          mountPath: /app/elastic
+          mountPath: /app/elastic-config
       containers:
       - name: mysql-log-generator
         image: djhope99/log-generator:latest
@@ -154,7 +154,7 @@ spec:
         - name: log-volume
           mountPath: /var/log/nginx_backend
         - name: elastic-config
-          mountPath: /app/elastic
+          mountPath: /app/elastic-config
       containers:
       - name: nginx-backend-log-generator
         image: djhope99/log-generator:latest
@@ -261,7 +261,7 @@ spec:
         - name: log-volume
           mountPath: /var/log/nginx_frontend
         - name: elastic-config
-          mountPath: /app/elastic
+          mountPath: /app/elastic-config
       containers:
       - name: nginx-frontend-log-generator
         image: djhope99/log-generator:latest
