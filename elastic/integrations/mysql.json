@@ -1,5 +1,5 @@
 {
-  "agent_policy_name": "K8s Monitoring Policy",
+  "agent_policy_name": "MySQL Monitoring Policy",
   "package_policy": {
     "package": {
       "name": "mysql",

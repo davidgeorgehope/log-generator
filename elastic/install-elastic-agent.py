@@ -239,20 +239,20 @@ def install_integration(integrations_dir):
     except Exception as e:
         logger.error(f"Error processing integration file {integration_file}: {str(e)}")
 
-def install_elastic_agent():
-    """Install Elastic agent using Fleet API."""
-    logger.info(f"Starting Elastic agent installation process for {CLIENT_TYPE}")
+def generate_enrollment_token():
+    """Generate an enrollment token for the agent."""
+    logger.info(f"Generating enrollment token for {CLIENT_TYPE}")
     
     # Get the agent policy name for this client
     agent_policy_name = get_policy_by_client_type()
     if not agent_policy_name:
-        return False
+        return None
     
     # Get the agent policy ID
     agent_policy_id = get_agent_policy_id(agent_policy_name)
     if not agent_policy_id:
         logger.error(f"Failed to get agent policy ID for '{agent_policy_name}'")
-        return False
+        return None
     
     try:
         # Generate enrollment token
@@ -267,7 +267,7 @@ def install_elastic_agent():
         
         if response.status_code != 200:
             logger.error(f"Failed to get enrollment API keys: {response.status_code} - {response.text}")
-            return False
+            return None
         
         # Find the enrollment key for our policy
         enrollment_keys = response.json().get('items', [])
@@ -279,43 +279,13 @@ def install_elastic_agent():
         
         if not enrollment_key:
             logger.error(f"No enrollment key found for policy ID {agent_policy_id}")
-            return False
-        
-        # Now install the agent
-        logger.info("Installing Elastic agent...")
-        
-        # Download the Elastic agent
-        subprocess.run([
-            "curl", "-L", "-o", "elastic-agent.tar.gz",
-            "https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-8.17.2-linux-x86_64.tar.gz"
-        ], check=True)
-        
-        # Extract the agent
-        subprocess.run(["tar", "xzvf", "elastic-agent.tar.gz"], check=True)
-        
-        # Install the agent - use a non-standard installation to avoid systemd dependencies
-        os.chdir("elastic-agent-8.17.2-linux-x86_64")
-        
-        # Instead of installing as a service, run in foreground in a background process
-        command = [
-            "./elastic-agent", "install", 
-            f"--url={FLEET_URL}", 
-            f"--enrollment-token={enrollment_key}", 
-            "--non-interactive",
-            "--force"
-        ]
-        
-        logger.info(f"Running Elastic agent installation command: {' '.join(command)}")
-        subprocess.run(command, check=True)
-        
-        logger.info("Elastic agent installed successfully")
-        return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error running command during Elastic agent installation: {str(e)}")
-        return False
+            return None
+            
+        logger.info(f"Successfully generated enrollment token for {CLIENT_TYPE}")
+        return enrollment_key
     except Exception as e:
-        logger.error(f"Error during Elastic agent installation: {str(e)}")
-        return False
+        logger.error(f"Error generating enrollment token: {str(e)}")
+        return None
 
 def setup_logging_directories():
     """Make sure logging directories exist for the client type."""
@@ -338,8 +308,8 @@ def setup_config_directories():
     logger.info("Created configuration directories")
 
 def main():
-    """Main function to install Elastic agent and integrations."""
-    logger.info(f"Starting Elastic agent and integration installation for {CLIENT_TYPE}")
+    """Main function to setup Elastic agent policies and integrations."""
+    logger.info(f"Starting Elastic agent policy and integration setup for {CLIENT_TYPE}")
     
     # Setup logging directories
     setup_logging_directories()
@@ -362,11 +332,17 @@ def main():
     # Install integration for this client type
     install_integration(integrations_dir)
     
-    # Install Elastic agent
-    if install_elastic_agent():
-        logger.info(f"Elastic agent and integration installation completed successfully for {CLIENT_TYPE}")
+    # Generate enrollment token to output for sidecar usage
+    enrollment_token = generate_enrollment_token()
+    if enrollment_token:
+        logger.info(f"Elastic agent policy and integration setup completed successfully for {CLIENT_TYPE}")
+        logger.info(f"Generated enrollment token: {enrollment_token}")
+        # Writing the token to a file that can be mounted in the sidecar container
+        with open('/app/elastic/enrollment_token.txt', 'w') as f:
+            f.write(enrollment_token)
+        logger.info("Enrollment token written to /app/elastic/enrollment_token.txt")
     else:
-        logger.error(f"Elastic agent installation failed for {CLIENT_TYPE}")
+        logger.error(f"Failed to generate enrollment token for {CLIENT_TYPE}")
         sys.exit(1)
 
 if __name__ == "__main__":

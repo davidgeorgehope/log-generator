@@ -15,7 +15,7 @@ spec:
         app: mysql-log-client
     spec:
       initContainers:
-      - name: elastic-agent-installer
+      - name: elastic-policy-setup
         image: djhope99/log-generator:latest
         command: ["python3", "/app/elastic/install-elastic-agent.py"]
         env:
@@ -46,6 +46,8 @@ spec:
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/mysql
+        - name: elastic-config
+          mountPath: /app/elastic
       containers:
       - name: mysql-log-generator
         image: djhope99/log-generator:latest
@@ -67,8 +69,40 @@ spec:
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/mysql
+      - name: elastic-agent
+        image: docker.elastic.co/elastic-agent/elastic-agent:8.17.2
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Read the enrollment token from the file
+            ENROLLMENT_TOKEN=$(cat /elastic-config/enrollment_token.txt)
+            # Export it as an environment variable
+            export FLEET_ENROLLMENT_TOKEN=$ENROLLMENT_TOKEN
+            # Start the Elastic Agent
+            exec /usr/bin/elastic-agent container
+        env:
+        - name: FLEET_ENROLL
+          value: "1"
+        - name: FLEET_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: FLEET_URL
+        - name: FLEET_INSECURE
+          value: "true"
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/mysql
+          readOnly: true
+        - name: elastic-config
+          mountPath: /elastic-config
+          readOnly: true
       volumes:
       - name: log-volume
+        emptyDir: {}
+      - name: elastic-config
         emptyDir: {}
 ---
 apiVersion: apps/v1
@@ -88,7 +122,7 @@ spec:
         app: nginx-backend-log-client
     spec:
       initContainers:
-      - name: elastic-agent-installer
+      - name: elastic-policy-setup
         image: djhope99/log-generator:latest
         command: ["python3", "/app/elastic/install-elastic-agent.py"]
         env:
@@ -119,6 +153,8 @@ spec:
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_backend
+        - name: elastic-config
+          mountPath: /app/elastic
       containers:
       - name: nginx-backend-log-generator
         image: djhope99/log-generator:latest
@@ -140,8 +176,40 @@ spec:
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_backend
+      - name: elastic-agent
+        image: docker.elastic.co/elastic-agent/elastic-agent:8.17.2
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Read the enrollment token from the file
+            ENROLLMENT_TOKEN=$(cat /elastic-config/enrollment_token.txt)
+            # Export it as an environment variable
+            export FLEET_ENROLLMENT_TOKEN=$ENROLLMENT_TOKEN
+            # Start the Elastic Agent
+            exec /usr/bin/elastic-agent container
+        env:
+        - name: FLEET_ENROLL
+          value: "1"
+        - name: FLEET_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: FLEET_URL
+        - name: FLEET_INSECURE
+          value: "true"
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/nginx_backend
+          readOnly: true
+        - name: elastic-config
+          mountPath: /elastic-config
+          readOnly: true
       volumes:
       - name: log-volume
+        emptyDir: {}
+      - name: elastic-config
         emptyDir: {}
 ---
 apiVersion: apps/v1
@@ -161,7 +229,7 @@ spec:
         app: nginx-frontend-log-client
     spec:
       initContainers:
-      - name: elastic-agent-installer
+      - name: elastic-policy-setup
         image: djhope99/log-generator:latest
         command: ["python3", "/app/elastic/install-elastic-agent.py"]
         env:
@@ -192,6 +260,8 @@ spec:
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_frontend
+        - name: elastic-config
+          mountPath: /app/elastic
       containers:
       - name: nginx-frontend-log-generator
         image: djhope99/log-generator:latest
@@ -213,6 +283,38 @@ spec:
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_frontend
+      - name: elastic-agent
+        image: docker.elastic.co/elastic-agent/elastic-agent:8.17.2
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Read the enrollment token from the file
+            ENROLLMENT_TOKEN=$(cat /elastic-config/enrollment_token.txt)
+            # Export it as an environment variable
+            export FLEET_ENROLLMENT_TOKEN=$ENROLLMENT_TOKEN
+            # Start the Elastic Agent
+            exec /usr/bin/elastic-agent container
+        env:
+        - name: FLEET_ENROLL
+          value: "1"
+        - name: FLEET_URL
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: FLEET_URL
+        - name: FLEET_INSECURE
+          value: "true"
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/nginx_frontend
+          readOnly: true
+        - name: elastic-config
+          mountPath: /elastic-config
+          readOnly: true
       volumes:
       - name: log-volume
+        emptyDir: {}
+      - name: elastic-config
         emptyDir: {} 
