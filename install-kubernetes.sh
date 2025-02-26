@@ -202,8 +202,13 @@ wait_for_kibana() {
     response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" "$KIBANA_URL/api/status")
     debug_log "Kibana response: $response"
     
-    if echo "$response" | grep -q "available"; then
+    if echo "$response" | jq -e '.status.overall.level == "available"' > /dev/null 2>&1; then
       echo -e "${GREEN}Kibana is available!${NC}"
+      
+      # Wait a bit more to ensure all Fleet APIs are ready
+      echo -e "${BLUE}Waiting for Fleet API to be fully ready...${NC}"
+      sleep 10
+      
       return 0
     fi
     
@@ -220,22 +225,41 @@ wait_for_kibana() {
 get_agent_policy_id() {
   local policy_name="$1"
   local response
+  local max_retries=3
+  local retry_delay=5
+  local attempt=1
   
   debug_log "Getting agent policy ID for '$policy_name'"
   
-  response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
-    -H "Content-Type: application/json" \
-    -H "kbn-xsrf: true" \
-    "${KIBANA_URL}/api/fleet/agent_policies?kuery=name:\"${policy_name}\"")
-  
-  debug_log "Agent policy response: $response"
-  
-  if echo "$response" | jq -e '.items | length > 0' > /dev/null; then
-    local policy_id
-    policy_id=$(echo "$response" | jq -r '.items[] | select(.name == "'"$policy_name"'") | .id')
-    echo "$policy_id"
-    return 0
-  fi
+  while [[ $attempt -le $max_retries ]]; do
+    debug_log "Attempt $attempt of $max_retries to get policy ID"
+    
+    response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+      -H "Content-Type: application/json" \
+      -H "kbn-xsrf: true" \
+      "${KIBANA_URL}/api/fleet/agent_policies?kuery=name:\"${policy_name}\"")
+    
+    debug_log "Agent policy response: $response"
+    
+    if echo "$response" | jq -e '.items | length > 0' > /dev/null; then
+      local policy_id
+      policy_id=$(echo "$response" | jq -r '.items[] | select(.name == "'"$policy_name"'") | .id')
+      
+      if [[ -n "$policy_id" && "$policy_id" != "null" ]]; then
+        echo "$policy_id"
+        return 0
+      fi
+    fi
+    
+    if [[ $attempt -lt $max_retries ]]; then
+      echo -e "${YELLOW}Policy '$policy_name' not found on attempt $attempt. Retrying in ${retry_delay} seconds...${NC}"
+      sleep $retry_delay
+      # Increase the delay for subsequent retries
+      retry_delay=$((retry_delay * 2))
+    fi
+    
+    ((attempt++))
+  done
   
   return 1
 }
@@ -318,11 +342,21 @@ install_integration() {
   echo -e "${BLUE}Installing integration '$integration_name' for policy '$agent_policy_name'...${NC}"
   
   # Get policy ID
+  echo -e "${BLUE}Looking up policy ID for '$agent_policy_name'...${NC}"
   agent_policy_id=$(get_agent_policy_id "$agent_policy_name")
   if [[ -z "$agent_policy_id" ]]; then
     echo -e "${RED}Agent policy '$agent_policy_name' not found.${NC}"
+    # List available policies for debugging
+    echo -e "${YELLOW}Available policies:${NC}"
+    debug_policies=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+      -H "Content-Type: application/json" \
+      -H "kbn-xsrf: true" \
+      "${KIBANA_URL}/api/fleet/agent_policies")
+    echo "$debug_policies" | jq -r '.items[] | .name + " (ID: " + .id + ")"' || echo "Failed to list policies"
     return 1
   fi
+  
+  echo -e "${GREEN}Found policy ID: $agent_policy_id for '$agent_policy_name'${NC}"
   
   # Create temporary file with policy ID inserted
   local temp_file
@@ -411,29 +445,216 @@ if [[ "$SKIP_TOKEN_GENERATION" == "false" ]]; then
   nginx_frontend_token=""
   nginx_backend_token=""
   
+  # Store policy IDs for direct use
+  mysql_policy_id=""
+  nginx_frontend_policy_id=""
+  nginx_backend_policy_id=""
+  
   # Try to create agent policies for each client type
   if [[ -d "elastic/agent_policies" ]]; then
-    for policy_file in elastic/agent_policies/mysql-agent-policy.json elastic/agent_policies/nginx-frontend-agent-policy.json elastic/agent_policies/nginx-backend-agent-policy.json; do
-      if check_file_exists "$policy_file" "Agent policy" >/dev/null; then
-        create_agent_policy "$policy_file" || echo -e "${YELLOW}Warning: Failed to create agent policy from $policy_file${NC}"
-      fi
-    done
-    
-    # Install integrations for each client type
-    if [[ -d "elastic/integrations" ]]; then
-      for integration_file in elastic/integrations/mysql.json elastic/integrations/nginx-frontend.json elastic/integrations/nginx-backend.json; do
-        if check_file_exists "$integration_file" "Integration" >/dev/null; then
-          install_integration "$integration_file" || echo -e "${YELLOW}Warning: Failed to install integration from $integration_file${NC}"
+    # Create MySQL policy
+    if check_file_exists "elastic/agent_policies/mysql-agent-policy.json" "Agent policy"; then
+      mysql_policy_name=$(cat "elastic/agent_policies/mysql-agent-policy.json" | jq -r '.name')
+      existing_id=$(get_agent_policy_id "$mysql_policy_name")
+      
+      if [[ -n "$existing_id" ]]; then
+        echo -e "${GREEN}Policy '$mysql_policy_name' already exists with ID: $existing_id${NC}"
+        mysql_policy_id="$existing_id"
+      else
+        response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -H "kbn-xsrf: true" \
+          -X POST \
+          -d @"elastic/agent_policies/mysql-agent-policy.json" \
+          "${KIBANA_URL}/api/fleet/agent_policies?sys_monitoring=true")
+        
+        if echo "$response" | jq -e '.item.id' > /dev/null; then
+          mysql_policy_id=$(echo "$response" | jq -r '.item.id')
+          echo -e "${GREEN}Created agent policy '$mysql_policy_name' with ID: $mysql_policy_id${NC}"
+        else
+          echo -e "${RED}Failed to create MySQL agent policy: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
         fi
-      done
+      fi
+    fi
+    
+    # Create Nginx Frontend policy
+    if check_file_exists "elastic/agent_policies/nginx-frontend-agent-policy.json" "Agent policy"; then
+      nginx_frontend_policy_name=$(cat "elastic/agent_policies/nginx-frontend-agent-policy.json" | jq -r '.name')
+      existing_id=$(get_agent_policy_id "$nginx_frontend_policy_name")
+      
+      if [[ -n "$existing_id" ]]; then
+        echo -e "${GREEN}Policy '$nginx_frontend_policy_name' already exists with ID: $existing_id${NC}"
+        nginx_frontend_policy_id="$existing_id"
+      else
+        response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -H "kbn-xsrf: true" \
+          -X POST \
+          -d @"elastic/agent_policies/nginx-frontend-agent-policy.json" \
+          "${KIBANA_URL}/api/fleet/agent_policies?sys_monitoring=true")
+        
+        if echo "$response" | jq -e '.item.id' > /dev/null; then
+          nginx_frontend_policy_id=$(echo "$response" | jq -r '.item.id')
+          echo -e "${GREEN}Created agent policy '$nginx_frontend_policy_name' with ID: $nginx_frontend_policy_id${NC}"
+        else
+          echo -e "${RED}Failed to create Nginx Frontend agent policy: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
+        fi
+      fi
+    fi
+    
+    # Create Nginx Backend policy
+    if check_file_exists "elastic/agent_policies/nginx-backend-agent-policy.json" "Agent policy"; then
+      nginx_backend_policy_name=$(cat "elastic/agent_policies/nginx-backend-agent-policy.json" | jq -r '.name')
+      existing_id=$(get_agent_policy_id "$nginx_backend_policy_name")
+      
+      if [[ -n "$existing_id" ]]; then
+        echo -e "${GREEN}Policy '$nginx_backend_policy_name' already exists with ID: $existing_id${NC}"
+        nginx_backend_policy_id="$existing_id"
+      else
+        response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -H "kbn-xsrf: true" \
+          -X POST \
+          -d @"elastic/agent_policies/nginx-backend-agent-policy.json" \
+          "${KIBANA_URL}/api/fleet/agent_policies?sys_monitoring=true")
+        
+        if echo "$response" | jq -e '.item.id' > /dev/null; then
+          nginx_backend_policy_id=$(echo "$response" | jq -r '.item.id')
+          echo -e "${GREEN}Created agent policy '$nginx_backend_policy_name' with ID: $nginx_backend_policy_id${NC}"
+        else
+          echo -e "${RED}Failed to create Nginx Backend agent policy: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
+        fi
+      fi
+    fi
+    
+    # Install integrations if we have policy IDs
+    if [[ -d "elastic/integrations" ]]; then
+      # Install MySQL integration
+      if [[ -n "$mysql_policy_id" ]] && check_file_exists "elastic/integrations/mysql.json" "Integration"; then
+        mysql_integration_name=$(cat "elastic/integrations/mysql.json" | jq -r '.package_policy.name')
+        echo -e "${BLUE}Installing integration '$mysql_integration_name' for MySQL policy...${NC}"
+        
+        temp_file=$(mktemp)
+        cat "elastic/integrations/mysql.json" | jq '.package_policy.policy_id = "'"$mysql_policy_id"'"' > "$temp_file"
+        
+        response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -H "kbn-xsrf: true" \
+          -X POST \
+          -d @"$temp_file" \
+          "${KIBANA_URL}/api/fleet/package_policies")
+        
+        rm "$temp_file"
+        
+        if echo "$response" | jq -e '.item.id' > /dev/null; then
+          echo -e "${GREEN}Installed MySQL integration successfully.${NC}"
+        elif echo "$response" | grep -q "already exists"; then
+          echo -e "${YELLOW}MySQL integration already exists.${NC}"
+        else
+          echo -e "${RED}Failed to install MySQL integration: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
+        fi
+      fi
+      
+      # Install Nginx Frontend integration
+      if [[ -n "$nginx_frontend_policy_id" ]] && check_file_exists "elastic/integrations/nginx-frontend.json" "Integration"; then
+        nginx_frontend_integration_name=$(cat "elastic/integrations/nginx-frontend.json" | jq -r '.package_policy.name')
+        echo -e "${BLUE}Installing integration '$nginx_frontend_integration_name' for Nginx Frontend policy...${NC}"
+        
+        temp_file=$(mktemp)
+        cat "elastic/integrations/nginx-frontend.json" | jq '.package_policy.policy_id = "'"$nginx_frontend_policy_id"'"' > "$temp_file"
+        
+        response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -H "kbn-xsrf: true" \
+          -X POST \
+          -d @"$temp_file" \
+          "${KIBANA_URL}/api/fleet/package_policies")
+        
+        rm "$temp_file"
+        
+        if echo "$response" | jq -e '.item.id' > /dev/null; then
+          echo -e "${GREEN}Installed Nginx Frontend integration successfully.${NC}"
+        elif echo "$response" | grep -q "already exists"; then
+          echo -e "${YELLOW}Nginx Frontend integration already exists.${NC}"
+        else
+          echo -e "${RED}Failed to install Nginx Frontend integration: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
+        fi
+      fi
+      
+      # Install Nginx Backend integration
+      if [[ -n "$nginx_backend_policy_id" ]] && check_file_exists "elastic/integrations/nginx-backend.json" "Integration"; then
+        nginx_backend_integration_name=$(cat "elastic/integrations/nginx-backend.json" | jq -r '.package_policy.name')
+        echo -e "${BLUE}Installing integration '$nginx_backend_integration_name' for Nginx Backend policy...${NC}"
+        
+        temp_file=$(mktemp)
+        cat "elastic/integrations/nginx-backend.json" | jq '.package_policy.policy_id = "'"$nginx_backend_policy_id"'"' > "$temp_file"
+        
+        response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -H "kbn-xsrf: true" \
+          -X POST \
+          -d @"$temp_file" \
+          "${KIBANA_URL}/api/fleet/package_policies")
+        
+        rm "$temp_file"
+        
+        if echo "$response" | jq -e '.item.id' > /dev/null; then
+          echo -e "${GREEN}Installed Nginx Backend integration successfully.${NC}"
+        elif echo "$response" | grep -q "already exists"; then
+          echo -e "${YELLOW}Nginx Backend integration already exists.${NC}"
+        else
+          echo -e "${RED}Failed to install Nginx Backend integration: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
+        fi
+      fi
     else
       echo -e "${YELLOW}Warning: Integrations directory does not exist!${NC}"
     fi
     
-    # Generate enrollment tokens
-    mysql_token=$(generate_enrollment_token "MySQL Monitoring Policy" || echo "")
-    nginx_frontend_token=$(generate_enrollment_token "Nginx Frontend Monitoring Policy" || echo "")
-    nginx_backend_token=$(generate_enrollment_token "Nginx Backend Monitoring Policy" || echo "")
+    # Generate enrollment tokens using stored policy IDs
+    if [[ -n "$mysql_policy_id" ]]; then
+      echo -e "${BLUE}Generating enrollment token for MySQL policy...${NC}"
+      response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+        -H "Content-Type: application/json" \
+        -H "kbn-xsrf: true" \
+        "${KIBANA_URL}/api/fleet/enrollment-api-keys")
+      
+      mysql_token=$(echo "$response" | jq -r ".items[] | select(.policy_id == \"$mysql_policy_id\") | .api_key")
+      if [[ -z "$mysql_token" || "$mysql_token" == "null" ]]; then
+        echo -e "${RED}No enrollment token found for MySQL policy ID $mysql_policy_id${NC}"
+      else
+        echo -e "${GREEN}Retrieved MySQL enrollment token successfully${NC}"
+      fi
+    fi
+    
+    if [[ -n "$nginx_frontend_policy_id" ]]; then
+      echo -e "${BLUE}Generating enrollment token for Nginx Frontend policy...${NC}"
+      response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+        -H "Content-Type: application/json" \
+        -H "kbn-xsrf: true" \
+        "${KIBANA_URL}/api/fleet/enrollment-api-keys")
+      
+      nginx_frontend_token=$(echo "$response" | jq -r ".items[] | select(.policy_id == \"$nginx_frontend_policy_id\") | .api_key")
+      if [[ -z "$nginx_frontend_token" || "$nginx_frontend_token" == "null" ]]; then
+        echo -e "${RED}No enrollment token found for Nginx Frontend policy ID $nginx_frontend_policy_id${NC}"
+      else
+        echo -e "${GREEN}Retrieved Nginx Frontend enrollment token successfully${NC}"
+      fi
+    fi
+    
+    if [[ -n "$nginx_backend_policy_id" ]]; then
+      echo -e "${BLUE}Generating enrollment token for Nginx Backend policy...${NC}"
+      response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
+        -H "Content-Type: application/json" \
+        -H "kbn-xsrf: true" \
+        "${KIBANA_URL}/api/fleet/enrollment-api-keys")
+      
+      nginx_backend_token=$(echo "$response" | jq -r ".items[] | select(.policy_id == \"$nginx_backend_policy_id\") | .api_key")
+      if [[ -z "$nginx_backend_token" || "$nginx_backend_token" == "null" ]]; then
+        echo -e "${RED}No enrollment token found for Nginx Backend policy ID $nginx_backend_policy_id${NC}"
+      else
+        echo -e "${GREEN}Retrieved Nginx Backend enrollment token successfully${NC}"
+      fi
+    fi
   else
     echo -e "${YELLOW}Warning: Agent policies directory not found! Using default tokens.${NC}"
   fi
