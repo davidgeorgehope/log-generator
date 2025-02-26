@@ -21,8 +21,5 @@ RUN mkdir -p /var/log/nginx_frontend /var/log/nginx_backend /var/log/mysql
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Make installation script executable
-RUN chmod +x /app/elastic/install-elastic-agent.py
-
 # The command will be overridden by Kubernetes
 CMD ["java", "-jar", "/app/log-generator-0.0.1-SNAPSHOT.jar"] 
