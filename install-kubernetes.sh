@@ -23,6 +23,7 @@ FLEET_URL="https://nginx-test-2ada07.fleet.us-central1.gcp.cloud.es.io"
 NAMESPACE="default"
 IMAGE_TAG="latest"
 SKIP_TOKEN_GENERATION=false
+DEBUG=false
 
 # Function to display script usage
 display_usage() {
@@ -36,6 +37,7 @@ display_usage() {
   echo -e "  --namespace <namespace>      Kubernetes namespace (default: default)"
   echo -e "  --image-tag <tag>            Docker image tag (default: latest)"
   echo -e "  --skip-token-generation      Skip Elastic enrollment token generation (default: false)"
+  echo -e "  --debug                      Enable debug output (default: false)"
   echo -e "  --help                       Display this help message and exit"
   echo -e "\n${BLUE}Example:${NC}"
   echo -e "  $0 --es-user elastic --es-password mypassword --kibana-url https://kibana.mycompany.com"
@@ -78,6 +80,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_TOKEN_GENERATION=true
       shift
       ;;
+    --debug)
+      DEBUG=true
+      shift
+      ;;
     --help)
       display_usage
       exit 0
@@ -90,9 +96,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Debug function
+debug_log() {
+  if [[ "$DEBUG" == "true" ]]; then
+    echo -e "${YELLOW}[DEBUG] $1${NC}"
+  fi
+}
+
 # Function to check if a command exists
 command_exists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+# Check if file exists with better error messaging
+check_file_exists() {
+  local file_path="$1"
+  local file_desc="$2"
+  
+  if [[ ! -f "$file_path" ]]; then
+    echo -e "${RED}Error: $file_desc file not found at $file_path${NC}"
+    debug_log "Current directory is $(pwd)"
+    debug_log "Directory listing: $(ls -la $(dirname "$file_path"))"
+    return 1
+  fi
+  
+  debug_log "File $file_path exists"
+  return 0
 }
 
 # Check prerequisites
@@ -169,7 +198,11 @@ wait_for_kibana() {
   while [[ $attempt -le $max_retries ]]; do
     echo -e "${BLUE}Attempt $attempt of $max_retries...${NC}"
     
-    if curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" "$KIBANA_URL/api/status" | grep -q "available"; then
+    local response
+    response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" "$KIBANA_URL/api/status")
+    debug_log "Kibana response: $response"
+    
+    if echo "$response" | grep -q "available"; then
       echo -e "${GREEN}Kibana is available!${NC}"
       return 0
     fi
@@ -188,13 +221,19 @@ get_agent_policy_id() {
   local policy_name="$1"
   local response
   
+  debug_log "Getting agent policy ID for '$policy_name'"
+  
   response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
     -H "Content-Type: application/json" \
     -H "kbn-xsrf: true" \
     "${KIBANA_URL}/api/fleet/agent_policies?kuery=name:\"${policy_name}\"")
   
+  debug_log "Agent policy response: $response"
+  
   if echo "$response" | jq -e '.items | length > 0' > /dev/null; then
-    echo "$response" | jq -r '.items[] | select(.name == "'"$policy_name"'") | .id'
+    local policy_id
+    policy_id=$(echo "$response" | jq -r '.items[] | select(.name == "'"$policy_name"'") | .id')
+    echo "$policy_id"
     return 0
   fi
   
@@ -207,8 +246,19 @@ create_agent_policy() {
   local policy_name
   local policy_id
   
+  # Check if policy file exists
+  if ! check_file_exists "$policy_file" "Agent policy"; then
+    echo -e "${RED}Skipping agent policy creation due to missing file.${NC}"
+    return 1
+  fi
+  
   # Read policy name from file
   policy_name=$(cat "$policy_file" | jq -r '.name')
+  if [[ -z "$policy_name" || "$policy_name" == "null" ]]; then
+    echo -e "${RED}Error: Unable to extract policy name from $policy_file${NC}"
+    debug_log "File contents: $(cat "$policy_file")"
+    return 1
+  fi
   
   echo -e "${BLUE}Checking if agent policy '$policy_name' exists...${NC}"
   
@@ -230,12 +280,14 @@ create_agent_policy() {
     -d @"$policy_file" \
     "${KIBANA_URL}/api/fleet/agent_policies?sys_monitoring=true")
   
+  debug_log "Create policy response: $response"
+  
   if echo "$response" | jq -e '.item.id' > /dev/null; then
     policy_id=$(echo "$response" | jq -r '.item.id')
     echo -e "${GREEN}Created agent policy '$policy_name' with ID: $policy_id${NC}"
     return 0
   else
-    echo -e "${RED}Failed to create agent policy: $(echo "$response" | jq -r '.message')${NC}"
+    echo -e "${RED}Failed to create agent policy: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
     return 1
   fi
 }
@@ -247,9 +299,21 @@ install_integration() {
   local agent_policy_name
   local agent_policy_id
   
+  # Check if integration file exists
+  if ! check_file_exists "$integration_file" "Integration"; then
+    echo -e "${RED}Skipping integration installation due to missing file.${NC}"
+    return 1
+  fi
+  
   # Read policy name from integration file
   agent_policy_name=$(cat "$integration_file" | jq -r '.agent_policy_name')
   integration_name=$(cat "$integration_file" | jq -r '.package_policy.name')
+  
+  if [[ -z "$agent_policy_name" || "$agent_policy_name" == "null" || -z "$integration_name" || "$integration_name" == "null" ]]; then
+    echo -e "${RED}Error: Unable to extract policy name or integration name from $integration_file${NC}"
+    debug_log "File contents: $(cat "$integration_file")"
+    return 1
+  fi
   
   echo -e "${BLUE}Installing integration '$integration_name' for policy '$agent_policy_name'...${NC}"
   
@@ -265,6 +329,8 @@ install_integration() {
   temp_file=$(mktemp)
   cat "$integration_file" | jq '.package_policy.policy_id = "'"$agent_policy_id"'"' > "$temp_file"
   
+  debug_log "Prepared integration payload: $(cat "$temp_file")"
+  
   # Install integration
   local response
   response=$(curl -s -k -u "$ELASTICSEARCH_USER:$ELASTICSEARCH_PASSWORD" \
@@ -276,6 +342,8 @@ install_integration() {
   
   rm "$temp_file"
   
+  debug_log "Integration installation response: $response"
+  
   if echo "$response" | jq -e '.item.id' > /dev/null; then
     echo -e "${GREEN}Installed integration '$integration_name' successfully.${NC}"
     return 0
@@ -285,7 +353,7 @@ install_integration() {
       echo -e "${YELLOW}Integration '$integration_name' already exists.${NC}"
       return 0
     fi
-    echo -e "${RED}Failed to install integration: $(echo "$response" | jq -r '.message')${NC}"
+    echo -e "${RED}Failed to install integration: $(echo "$response" | jq -r '.message // "Unknown error"')${NC}"
     return 1
   fi
 }
@@ -311,11 +379,13 @@ generate_enrollment_token() {
     -H "kbn-xsrf: true" \
     "${KIBANA_URL}/api/fleet/enrollment-api-keys")
   
+  debug_log "Enrollment API keys response: $response"
+  
   # Extract token for this policy
   local token
   token=$(echo "$response" | jq -r ".items[] | select(.policy_id == \"$policy_id\") | .api_key")
   
-  if [[ -n "$token" ]]; then
+  if [[ -n "$token" && "$token" != "null" ]]; then
     echo "$token"
     return 0
   else
@@ -331,20 +401,58 @@ if [[ "$SKIP_TOKEN_GENERATION" == "false" ]]; then
   # Wait for Kibana to be available
   wait_for_kibana
   
-  # Create agent policies for each client type
-  create_agent_policy "elastic/agent_policies/mysql-agent-policy.json"
-  create_agent_policy "elastic/agent_policies/nginx-frontend-agent-policy.json"
-  create_agent_policy "elastic/agent_policies/nginx-backend-agent-policy.json"
+  # Print current directory and check for policy files
+  debug_log "Current directory: $(pwd)"
+  debug_log "Policy directory listing: $(ls -la elastic/agent_policies/ 2>/dev/null || echo 'Directory not found')"
+  debug_log "Integrations directory listing: $(ls -la elastic/integrations/ 2>/dev/null || echo 'Directory not found')"
   
-  # Install integrations for each client type
-  install_integration "elastic/integrations/mysql.json"
-  install_integration "elastic/integrations/nginx-frontend.json"
-  install_integration "elastic/integrations/nginx-backend.json"
+  # Use default enrollment tokens if policies don't exist
+  mysql_token=""
+  nginx_frontend_token=""
+  nginx_backend_token=""
   
-  # Generate enrollment tokens
-  mysql_token=$(generate_enrollment_token "MySQL Monitoring Policy")
-  nginx_frontend_token=$(generate_enrollment_token "Nginx Frontend Monitoring Policy")
-  nginx_backend_token=$(generate_enrollment_token "Nginx Backend Monitoring Policy")
+  # Try to create agent policies for each client type
+  if [[ -d "elastic/agent_policies" ]]; then
+    for policy_file in elastic/agent_policies/mysql-agent-policy.json elastic/agent_policies/nginx-frontend-agent-policy.json elastic/agent_policies/nginx-backend-agent-policy.json; do
+      if check_file_exists "$policy_file" "Agent policy" >/dev/null; then
+        create_agent_policy "$policy_file" || echo -e "${YELLOW}Warning: Failed to create agent policy from $policy_file${NC}"
+      fi
+    done
+    
+    # Install integrations for each client type
+    if [[ -d "elastic/integrations" ]]; then
+      for integration_file in elastic/integrations/mysql.json elastic/integrations/nginx-frontend.json elastic/integrations/nginx-backend.json; do
+        if check_file_exists "$integration_file" "Integration" >/dev/null; then
+          install_integration "$integration_file" || echo -e "${YELLOW}Warning: Failed to install integration from $integration_file${NC}"
+        fi
+      done
+    else
+      echo -e "${YELLOW}Warning: Integrations directory does not exist!${NC}"
+    fi
+    
+    # Generate enrollment tokens
+    mysql_token=$(generate_enrollment_token "MySQL Monitoring Policy" || echo "")
+    nginx_frontend_token=$(generate_enrollment_token "Nginx Frontend Monitoring Policy" || echo "")
+    nginx_backend_token=$(generate_enrollment_token "Nginx Backend Monitoring Policy" || echo "")
+  else
+    echo -e "${YELLOW}Warning: Agent policies directory not found! Using default tokens.${NC}"
+  fi
+  
+  # Use example tokens if we couldn't generate real ones
+  if [[ -z "$mysql_token" ]]; then
+    echo -e "${YELLOW}Using example MySQL enrollment token due to failure in token generation${NC}"
+    mysql_token="EXAMPLE_MYSQL_TOKEN_PLACEHOLDER"
+  fi
+  
+  if [[ -z "$nginx_frontend_token" ]]; then
+    echo -e "${YELLOW}Using example Nginx Frontend enrollment token due to failure in token generation${NC}"
+    nginx_frontend_token="EXAMPLE_NGINX_FRONTEND_TOKEN_PLACEHOLDER"
+  fi
+  
+  if [[ -z "$nginx_backend_token" ]]; then
+    echo -e "${YELLOW}Using example Nginx Backend enrollment token due to failure in token generation${NC}"
+    nginx_backend_token="EXAMPLE_NGINX_BACKEND_TOKEN_PLACEHOLDER"
+  fi
   
   # Check if enrollment tokens ConfigMap exists and delete it
   echo -e "\n${BLUE}Checking for existing enrollment tokens ConfigMap...${NC}"
@@ -371,7 +479,7 @@ fi
 # Check if the deployment file exists
 DEPLOYMENT_FILE="kubernetes/elastic-agents.yaml"
 
-if [ ! -f "$DEPLOYMENT_FILE" ]; then
+if ! check_file_exists "$DEPLOYMENT_FILE" "Deployment"; then
   echo -e "${RED}Error: Deployment file $DEPLOYMENT_FILE not found.${NC}"
   exit 1
 fi
