@@ -43,6 +43,10 @@ spec:
           value: "false"
         - name: CLIENT_TYPE
           value: "mysql"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/mysql
@@ -71,15 +75,6 @@ spec:
           mountPath: /var/log/mysql
       - name: elastic-agent
         image: docker.elastic.co/elastic-agent/elastic-agent:8.17.2
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            # Read the enrollment token from the file
-            ENROLLMENT_TOKEN=$(cat /elastic-config/enrollment_token.txt)
-            # Export it as an environment variable
-            export FLEET_ENROLLMENT_TOKEN=$ENROLLMENT_TOKEN
-            # Start the Elastic Agent
-            exec /usr/bin/elastic-agent container
         env:
         - name: FLEET_ENROLL
           value: "1"
@@ -90,6 +85,8 @@ spec:
               key: FLEET_URL
         - name: FLEET_INSECURE
           value: "true"
+        - name: FLEET_ENROLLMENT_TOKEN_PATH
+          value: "/app/elastic-config/enrollment_token.txt"
         securityContext:
           runAsUser: 0
         volumeMounts:
@@ -97,7 +94,7 @@ spec:
           mountPath: /var/log/mysql
           readOnly: true
         - name: elastic-config
-          mountPath: /elastic-config
+          mountPath: /app/elastic-config
           readOnly: true
       volumes:
       - name: log-volume
@@ -150,6 +147,10 @@ spec:
           value: "false"
         - name: CLIENT_TYPE
           value: "nginx-backend"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_backend
@@ -178,15 +179,6 @@ spec:
           mountPath: /var/log/nginx_backend
       - name: elastic-agent
         image: docker.elastic.co/elastic-agent/elastic-agent:8.17.2
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            # Read the enrollment token from the file
-            ENROLLMENT_TOKEN=$(cat /elastic-config/enrollment_token.txt)
-            # Export it as an environment variable
-            export FLEET_ENROLLMENT_TOKEN=$ENROLLMENT_TOKEN
-            # Start the Elastic Agent
-            exec /usr/bin/elastic-agent container
         env:
         - name: FLEET_ENROLL
           value: "1"
@@ -197,6 +189,8 @@ spec:
               key: FLEET_URL
         - name: FLEET_INSECURE
           value: "true"
+        - name: FLEET_ENROLLMENT_TOKEN_PATH
+          value: "/app/elastic-config/enrollment_token.txt"
         securityContext:
           runAsUser: 0
         volumeMounts:
@@ -204,7 +198,7 @@ spec:
           mountPath: /var/log/nginx_backend
           readOnly: true
         - name: elastic-config
-          mountPath: /elastic-config
+          mountPath: /app/elastic-config
           readOnly: true
       volumes:
       - name: log-volume
@@ -257,6 +251,10 @@ spec:
           value: "false"
         - name: CLIENT_TYPE
           value: "nginx-frontend"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_frontend
@@ -285,15 +283,6 @@ spec:
           mountPath: /var/log/nginx_frontend
       - name: elastic-agent
         image: docker.elastic.co/elastic-agent/elastic-agent:8.17.2
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            # Read the enrollment token from the file
-            ENROLLMENT_TOKEN=$(cat /elastic-config/enrollment_token.txt)
-            # Export it as an environment variable
-            export FLEET_ENROLLMENT_TOKEN=$ENROLLMENT_TOKEN
-            # Start the Elastic Agent
-            exec /usr/bin/elastic-agent container
         env:
         - name: FLEET_ENROLL
           value: "1"
@@ -304,6 +293,8 @@ spec:
               key: FLEET_URL
         - name: FLEET_INSECURE
           value: "true"
+        - name: FLEET_ENROLLMENT_TOKEN_PATH
+          value: "/app/elastic-config/enrollment_token.txt"
         securityContext:
           runAsUser: 0
         volumeMounts:
@@ -311,7 +302,7 @@ spec:
           mountPath: /var/log/nginx_frontend
           readOnly: true
         - name: elastic-config
-          mountPath: /elastic-config
+          mountPath: /app/elastic-config
           readOnly: true
       volumes:
       - name: log-volume

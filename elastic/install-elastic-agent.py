@@ -7,7 +7,6 @@ import json
 import glob
 import time
 import logging
-import subprocess
 from urllib3.exceptions import InsecureRequestWarning
 
 # Configure logging
@@ -27,11 +26,12 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 KIBANA_URL = os.environ.get('KIBANA_URL')
 ELASTICSEARCH_USER = os.environ.get('ELASTICSEARCH_USER')
 ELASTICSEARCH_PASSWORD = os.environ.get('ELASTICSEARCH_PASSWORD')
-FLEET_URL = os.environ.get('FLEET_URL')  # Use KIBANA_URL as fallback
+FLEET_URL = os.environ.get('FLEET_URL', KIBANA_URL)  # Use KIBANA_URL as fallback
 VERIFY_SSL = os.environ.get('VERIFY_SSL', 'false').lower() == 'true'
 MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '5'))
 RETRY_DELAY = int(os.environ.get('RETRY_DELAY', '10'))
 CLIENT_TYPE = os.environ.get('CLIENT_TYPE', 'unknown')  # mysql, nginx-frontend, or nginx-backend
+NAMESPACE = os.environ.get('NAMESPACE', 'default')
 
 # Check if required environment variables are set
 if not KIBANA_URL:
@@ -298,11 +298,9 @@ def setup_logging_directories():
     logger.info(f"Created logging directories for {CLIENT_TYPE}")
 
 def setup_config_directories():
-    """Make sure the enrollment token directory exists."""
-    # We only need to create the directory for the enrollment token
-    # The integration and policy files are already in the container image
+    """Make sure the temporary directory exists."""
     os.makedirs('/app/elastic-config', exist_ok=True)
-    logger.info("Created enrollment token directory at /app/elastic-config")
+    logger.info("Created temporary directory at /app/elastic-config")
 
 def main():
     """Main function to setup Elastic agent policies and integrations."""
@@ -334,10 +332,12 @@ def main():
     if enrollment_token:
         logger.info(f"Elastic agent policy and integration setup completed successfully for {CLIENT_TYPE}")
         logger.info(f"Generated enrollment token: {enrollment_token}")
-        # Writing the token to a file that can be mounted in the sidecar container
-        with open('/app/elastic-config/enrollment_token.txt', 'w') as f:
+        
+        # Write the token to a file in the shared volume
+        token_file = f"/app/elastic-config/enrollment_token.txt"
+        with open(token_file, 'w') as f:
             f.write(enrollment_token)
-        logger.info("Enrollment token written to /app/elastic-config/enrollment_token.txt")
+        logger.info(f"Enrollment token written to {token_file}")
     else:
         logger.error(f"Failed to generate enrollment token for {CLIENT_TYPE}")
         sys.exit(1)
