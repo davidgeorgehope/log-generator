@@ -173,11 +173,12 @@ def create_namespace():
     if config['namespace'] != 'default':
         print(f"\n{BLUE}Creating namespace {config['namespace']} if it doesn't exist...{NC}")
         try:
-            subprocess.run([
+            result = subprocess.run([
                 'kubectl', 'create', 'namespace', config['namespace'],
                 '--dry-run=client', '-o', 'yaml'
-            ], stdout=subprocess.PIPE, check=True, text=True).stdout | \
-            subprocess.run(['kubectl', 'apply', '-f', '-'], input=_, check=True, text=True)
+            ], stdout=subprocess.PIPE, check=True, text=True)
+            
+            subprocess.run(['kubectl', 'apply', '-f', '-'], input=result.stdout, check=True, text=True)
             print(f"{GREEN}Namespace created or already exists.{NC}")
         except subprocess.CalledProcessError as e:
             print(f"{RED}Error creating namespace: {str(e)}{NC}")
@@ -209,7 +210,7 @@ def create_elasticsearch_secret():
     # Create new secret
     print(f"\n{BLUE}Creating Elasticsearch credentials secret...{NC}")
     try:
-        subprocess.run([
+        result = subprocess.run([
             'kubectl', 'create', 'secret', 'generic', 'elasticsearch-credentials',
             '--namespace', config['namespace'],
             '--from-literal=ELASTICSEARCH_USER=' + config['elasticsearch_user'],
@@ -218,8 +219,9 @@ def create_elasticsearch_secret():
             '--from-literal=ELASTICSEARCH_URL=' + config['elasticsearch_url'],
             '--from-literal=FLEET_URL=' + config['fleet_url'],
             '--dry-run=client', '-o', 'yaml'
-        ], stdout=subprocess.PIPE, check=True, text=True).stdout | \
-        subprocess.run(['kubectl', 'apply', '-f', '-'], input=_, check=True, text=True)
+        ], stdout=subprocess.PIPE, check=True, text=True)
+        
+        subprocess.run(['kubectl', 'apply', '-f', '-'], input=result.stdout, check=True, text=True)
         
         print(f"{GREEN}Secret created successfully.{NC}")
     except subprocess.CalledProcessError as e:
@@ -554,15 +556,16 @@ def create_enrollment_tokens_configmap():
     # Create ConfigMap with enrollment tokens
     print(f"\n{BLUE}Creating enrollment tokens ConfigMap...{NC}")
     try:
-        subprocess.run([
+        result = subprocess.run([
             'kubectl', 'create', 'configmap', 'enrollment-tokens',
             '--namespace', config['namespace'],
             '--from-literal=mysql-enrollment-token=' + mysql_token,
             '--from-literal=nginx-frontend-enrollment-token=' + nginx_frontend_token,
             '--from-literal=nginx-backend-enrollment-token=' + nginx_backend_token,
             '--dry-run=client', '-o', 'yaml'
-        ], stdout=subprocess.PIPE, check=True, text=True).stdout | \
-        subprocess.run(['kubectl', 'apply', '-f', '-'], input=_, check=True, text=True)
+        ], stdout=subprocess.PIPE, check=True, text=True)
+        
+        subprocess.run(['kubectl', 'apply', '-f', '-'], input=result.stdout, check=True, text=True)
         
         print(f"{GREEN}Enrollment tokens ConfigMap created successfully.{NC}")
         return True
