@@ -24,6 +24,7 @@ NAMESPACE="default"
 IMAGE_TAG="latest"
 SKIP_TOKEN_GENERATION=false
 DEBUG=false
+FORCE_SKIP_TOKEN=false  # New flag to force skipping tokens on errors
 
 # Function to display script usage
 display_usage() {
@@ -37,6 +38,7 @@ display_usage() {
   echo -e "  --namespace <namespace>      Kubernetes namespace (default: default)"
   echo -e "  --image-tag <tag>            Docker image tag (default: latest)"
   echo -e "  --skip-token-generation      Skip Elastic enrollment token generation (default: false)"
+  echo -e "  --force-skip-token           Force skip token generation on any error (default: false)"
   echo -e "  --debug                      Enable debug output (default: false)"
   echo -e "  --help                       Display this help message and exit"
   echo -e "\n${BLUE}Example:${NC}"
@@ -78,6 +80,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-token-generation)
       SKIP_TOKEN_GENERATION=true
+      shift
+      ;;
+    --force-skip-token)
+      FORCE_SKIP_TOKEN=true
       shift
       ;;
     --debug)
@@ -243,13 +249,18 @@ except ImportError as e:
       
       BASE_DIR=$(pwd)
       
+      # Initialize a variable to track if we should skip remaining tokens
+      SKIP_REMAINING_TOKENS=false
+      
       # Run the script for MySQL policy
       echo -e "${BLUE}Setting up MySQL policy and generating token...${NC}"
       if [[ "$DEBUG" == "true" ]]; then
         echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type mysql --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
       fi
       
-      mysql_token=$(python3 "$SCRIPT_PATH" \
+      # Use timeout command with 30 seconds
+      echo -e "${BLUE}Running with a 30 second timeout...${NC}"
+      mysql_token=$(timeout 30 python3 "$SCRIPT_PATH" \
         --kibana-url "$KIBANA_URL" \
         --fleet-url "$FLEET_URL" \
         --username "$ELASTICSEARCH_USER" \
@@ -258,67 +269,131 @@ except ImportError as e:
         --namespace "$NAMESPACE" \
         --base-dir "$BASE_DIR" \
         --output-token 2>&1)
-        
-      # Check if the output contains an error message
-      if [[ "$mysql_token" == *"error"* || "$mysql_token" == *"Error"* || "$mysql_token" == *"Traceback"* ]]; then
+      
+      TIMEOUT_STATUS=$?
+      if [ $TIMEOUT_STATUS -eq 124 ]; then
+        echo -e "${RED}Error: Python script execution timed out after 30 seconds${NC}"
+        mysql_token=""
+        if [ "$FORCE_SKIP_TOKEN" = true ]; then
+          echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+          # Skip to the ConfigMap creation with placeholder tokens
+          SKIP_REMAINING_TOKENS=true
+        fi
+      elif [[ "$mysql_token" == *"error"* || "$mysql_token" == *"Error"* || "$mysql_token" == *"Traceback"* ]]; then
         echo -e "${RED}Error running MySQL enrollment token generation:${NC}"
         echo -e "${RED}$mysql_token${NC}"
+        if [ "$FORCE_SKIP_TOKEN" = true ]; then
+          echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+          # Skip to the ConfigMap creation with placeholder tokens
+          SKIP_REMAINING_TOKENS=true
+        fi
       elif [[ -n "$mysql_token" ]]; then
         echo -e "${GREEN}Successfully generated MySQL enrollment token${NC}"
       else
         echo -e "${RED}Failed to generate MySQL enrollment token${NC}"
+        if [ "$FORCE_SKIP_TOKEN" = true ]; then
+          echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+          # Skip to the ConfigMap creation with placeholder tokens
+          SKIP_REMAINING_TOKENS=true
+        fi
       fi
       
-      # Run the script for Nginx Frontend policy
-      echo -e "${BLUE}Setting up Nginx Frontend policy and generating token...${NC}"
-      if [[ "$DEBUG" == "true" ]]; then
-        echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-frontend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
-      fi
-      
-      nginx_frontend_token=$(python3 "$SCRIPT_PATH" \
-        --kibana-url "$KIBANA_URL" \
-        --fleet-url "$FLEET_URL" \
-        --username "$ELASTICSEARCH_USER" \
-        --password "$ELASTICSEARCH_PASSWORD" \
-        --client-type "nginx-frontend" \
-        --namespace "$NAMESPACE" \
-        --base-dir "$BASE_DIR" \
-        --output-token 2>&1)
+      # Only proceed with Nginx Frontend if we didn't skip
+      if [ -z "$SKIP_REMAINING_TOKENS" ]; then
+        # Run the script for Nginx Frontend policy
+        echo -e "${BLUE}Setting up Nginx Frontend policy and generating token...${NC}"
+        if [[ "$DEBUG" == "true" ]]; then
+          echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-frontend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
+        fi
         
-      # Check if the output contains an error message
-      if [[ "$nginx_frontend_token" == *"error"* || "$nginx_frontend_token" == *"Error"* || "$nginx_frontend_token" == *"Traceback"* ]]; then
-        echo -e "${RED}Error running Nginx Frontend enrollment token generation:${NC}"
-        echo -e "${RED}$nginx_frontend_token${NC}"
-      elif [[ -n "$nginx_frontend_token" ]]; then
-        echo -e "${GREEN}Successfully generated Nginx Frontend enrollment token${NC}"
-      else
-        echo -e "${RED}Failed to generate Nginx Frontend enrollment token${NC}"
-      fi
-      
-      # Run the script for Nginx Backend policy
-      echo -e "${BLUE}Setting up Nginx Backend policy and generating token...${NC}"
-      if [[ "$DEBUG" == "true" ]]; then
-        echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-backend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
-      fi
-      
-      nginx_backend_token=$(python3 "$SCRIPT_PATH" \
-        --kibana-url "$KIBANA_URL" \
-        --fleet-url "$FLEET_URL" \
-        --username "$ELASTICSEARCH_USER" \
-        --password "$ELASTICSEARCH_PASSWORD" \
-        --client-type "nginx-backend" \
-        --namespace "$NAMESPACE" \
-        --base-dir "$BASE_DIR" \
-        --output-token 2>&1)
+        # Use timeout command with 30 seconds
+        echo -e "${BLUE}Running with a 30 second timeout...${NC}"
+        nginx_frontend_token=$(timeout 30 python3 "$SCRIPT_PATH" \
+          --kibana-url "$KIBANA_URL" \
+          --fleet-url "$FLEET_URL" \
+          --username "$ELASTICSEARCH_USER" \
+          --password "$ELASTICSEARCH_PASSWORD" \
+          --client-type "nginx-frontend" \
+          --namespace "$NAMESPACE" \
+          --base-dir "$BASE_DIR" \
+          --output-token 2>&1)
         
-      # Check if the output contains an error message
-      if [[ "$nginx_backend_token" == *"error"* || "$nginx_backend_token" == *"Error"* || "$nginx_backend_token" == *"Traceback"* ]]; then
-        echo -e "${RED}Error running Nginx Backend enrollment token generation:${NC}"
-        echo -e "${RED}$nginx_backend_token${NC}"
-      elif [[ -n "$nginx_backend_token" ]]; then
-        echo -e "${GREEN}Successfully generated Nginx Backend enrollment token${NC}"
-      else
-        echo -e "${RED}Failed to generate Nginx Backend enrollment token${NC}"
+        TIMEOUT_STATUS=$?
+        if [ $TIMEOUT_STATUS -eq 124 ]; then
+          echo -e "${RED}Error: Python script execution timed out after 30 seconds${NC}"
+          nginx_frontend_token=""
+          if [ "$FORCE_SKIP_TOKEN" = true ]; then
+            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+            # Skip to the ConfigMap creation with placeholder tokens
+            SKIP_REMAINING_TOKENS=true
+          fi
+        elif [[ "$nginx_frontend_token" == *"error"* || "$nginx_frontend_token" == *"Error"* || "$nginx_frontend_token" == *"Traceback"* ]]; then
+          echo -e "${RED}Error running Nginx Frontend enrollment token generation:${NC}"
+          echo -e "${RED}$nginx_frontend_token${NC}"
+          if [ "$FORCE_SKIP_TOKEN" = true ]; then
+            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+            # Skip to the ConfigMap creation with placeholder tokens
+            SKIP_REMAINING_TOKENS=true
+          fi
+        elif [[ -n "$nginx_frontend_token" ]]; then
+          echo -e "${GREEN}Successfully generated Nginx Frontend enrollment token${NC}"
+        else
+          echo -e "${RED}Failed to generate Nginx Frontend enrollment token${NC}"
+          if [ "$FORCE_SKIP_TOKEN" = true ]; then
+            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+            # Skip to the ConfigMap creation with placeholder tokens
+            SKIP_REMAINING_TOKENS=true
+          fi
+        fi
+      fi
+      
+      # Only proceed with Nginx Backend if we didn't skip
+      if [ -z "$SKIP_REMAINING_TOKENS" ]; then
+        # Run the script for Nginx Backend policy
+        echo -e "${BLUE}Setting up Nginx Backend policy and generating token...${NC}"
+        if [[ "$DEBUG" == "true" ]]; then
+          echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-backend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
+        fi
+        
+        # Use timeout command with 30 seconds
+        echo -e "${BLUE}Running with a 30 second timeout...${NC}"
+        nginx_backend_token=$(timeout 30 python3 "$SCRIPT_PATH" \
+          --kibana-url "$KIBANA_URL" \
+          --fleet-url "$FLEET_URL" \
+          --username "$ELASTICSEARCH_USER" \
+          --password "$ELASTICSEARCH_PASSWORD" \
+          --client-type "nginx-backend" \
+          --namespace "$NAMESPACE" \
+          --base-dir "$BASE_DIR" \
+          --output-token 2>&1)
+        
+        TIMEOUT_STATUS=$?
+        if [ $TIMEOUT_STATUS -eq 124 ]; then
+          echo -e "${RED}Error: Python script execution timed out after 30 seconds${NC}"
+          nginx_backend_token=""
+          if [ "$FORCE_SKIP_TOKEN" = true ]; then
+            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+            # Skip to the ConfigMap creation with placeholder tokens
+            SKIP_REMAINING_TOKENS=true
+          fi
+        elif [[ "$nginx_backend_token" == *"error"* || "$nginx_backend_token" == *"Error"* || "$nginx_backend_token" == *"Traceback"* ]]; then
+          echo -e "${RED}Error running Nginx Backend enrollment token generation:${NC}"
+          echo -e "${RED}$nginx_backend_token${NC}"
+          if [ "$FORCE_SKIP_TOKEN" = true ]; then
+            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+            # Skip to the ConfigMap creation with placeholder tokens
+            SKIP_REMAINING_TOKENS=true
+          fi
+        elif [[ -n "$nginx_backend_token" ]]; then
+          echo -e "${GREEN}Successfully generated Nginx Backend enrollment token${NC}"
+        else
+          echo -e "${RED}Failed to generate Nginx Backend enrollment token${NC}"
+          if [ "$FORCE_SKIP_TOKEN" = true ]; then
+            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
+            # Skip to the ConfigMap creation with placeholder tokens
+            SKIP_REMAINING_TOKENS=true
+          fi
+        fi
       fi
     fi
   fi
