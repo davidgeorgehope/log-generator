@@ -14,44 +14,6 @@ spec:
       labels:
         app: mysql-log-client
     spec:
-      initContainers:
-      - name: elastic-policy-setup
-        image: djhope99/log-generator:latest
-        command: ["python3", "/app/elastic/install-elastic-agent.py"]
-        env:
-        - name: KIBANA_URL
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: KIBANA_URL
-        - name: ELASTICSEARCH_USER
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: ELASTICSEARCH_USER
-        - name: ELASTICSEARCH_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: ELASTICSEARCH_PASSWORD
-        - name: FLEET_URL
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: FLEET_URL
-        - name: VERIFY_SSL
-          value: "false"
-        - name: CLIENT_TYPE
-          value: "mysql"
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        volumeMounts:
-        - name: log-volume
-          mountPath: /var/log/mysql
-        - name: elastic-config
-          mountPath: /app/elastic-config
       containers:
       - name: mysql-log-generator
         image: djhope99/log-generator:latest
@@ -85,21 +47,19 @@ spec:
               key: FLEET_URL
         - name: FLEET_INSECURE
           value: "true"
-        - name: FLEET_ENROLLMENT_TOKEN_PATH
-          value: "/app/elastic-config/enrollment_token.txt"
+        - name: FLEET_ENROLLMENT_TOKEN
+          valueFrom:
+            configMapKeyRef:
+              name: enrollment-tokens
+              key: mysql-enrollment-token
         securityContext:
           runAsUser: 0
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/mysql
           readOnly: true
-        - name: elastic-config
-          mountPath: /app/elastic-config
-          readOnly: true
       volumes:
       - name: log-volume
-        emptyDir: {}
-      - name: elastic-config
         emptyDir: {}
 ---
 apiVersion: apps/v1
@@ -118,44 +78,6 @@ spec:
       labels:
         app: nginx-backend-log-client
     spec:
-      initContainers:
-      - name: elastic-policy-setup
-        image: djhope99/log-generator:latest
-        command: ["python3", "/app/elastic/install-elastic-agent.py"]
-        env:
-        - name: KIBANA_URL
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: KIBANA_URL
-        - name: ELASTICSEARCH_USER
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: ELASTICSEARCH_USER
-        - name: ELASTICSEARCH_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: ELASTICSEARCH_PASSWORD
-        - name: FLEET_URL
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: FLEET_URL
-        - name: VERIFY_SSL
-          value: "false"
-        - name: CLIENT_TYPE
-          value: "nginx-backend"
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        volumeMounts:
-        - name: log-volume
-          mountPath: /var/log/nginx_backend
-        - name: elastic-config
-          mountPath: /app/elastic-config
       containers:
       - name: nginx-backend-log-generator
         image: djhope99/log-generator:latest
@@ -189,21 +111,19 @@ spec:
               key: FLEET_URL
         - name: FLEET_INSECURE
           value: "true"
-        - name: FLEET_ENROLLMENT_TOKEN_PATH
-          value: "/app/elastic-config/enrollment_token.txt"
+        - name: FLEET_ENROLLMENT_TOKEN
+          valueFrom:
+            configMapKeyRef:
+              name: enrollment-tokens
+              key: nginx-backend-enrollment-token
         securityContext:
           runAsUser: 0
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_backend
           readOnly: true
-        - name: elastic-config
-          mountPath: /app/elastic-config
-          readOnly: true
       volumes:
       - name: log-volume
-        emptyDir: {}
-      - name: elastic-config
         emptyDir: {}
 ---
 apiVersion: apps/v1
@@ -222,44 +142,6 @@ spec:
       labels:
         app: nginx-frontend-log-client
     spec:
-      initContainers:
-      - name: elastic-policy-setup
-        image: djhope99/log-generator:latest
-        command: ["python3", "/app/elastic/install-elastic-agent.py"]
-        env:
-        - name: KIBANA_URL
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: KIBANA_URL
-        - name: ELASTICSEARCH_USER
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: ELASTICSEARCH_USER
-        - name: ELASTICSEARCH_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: ELASTICSEARCH_PASSWORD
-        - name: FLEET_URL
-          valueFrom:
-            secretKeyRef:
-              name: elasticsearch-credentials
-              key: FLEET_URL
-        - name: VERIFY_SSL
-          value: "false"
-        - name: CLIENT_TYPE
-          value: "nginx-frontend"
-        - name: NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        volumeMounts:
-        - name: log-volume
-          mountPath: /var/log/nginx_frontend
-        - name: elastic-config
-          mountPath: /app/elastic-config
       containers:
       - name: nginx-frontend-log-generator
         image: djhope99/log-generator:latest
@@ -293,19 +175,17 @@ spec:
               key: FLEET_URL
         - name: FLEET_INSECURE
           value: "true"
-        - name: FLEET_ENROLLMENT_TOKEN_PATH
-          value: "/app/elastic-config/enrollment_token.txt"
+        - name: FLEET_ENROLLMENT_TOKEN
+          valueFrom:
+            configMapKeyRef:
+              name: enrollment-tokens
+              key: nginx-frontend-enrollment-token
         securityContext:
           runAsUser: 0
         volumeMounts:
         - name: log-volume
           mountPath: /var/log/nginx_frontend
           readOnly: true
-        - name: elastic-config
-          mountPath: /app/elastic-config
-          readOnly: true
       volumes:
       - name: log-volume
-        emptyDir: {}
-      - name: elastic-config
         emptyDir: {} 
