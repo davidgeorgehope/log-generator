@@ -2,8 +2,7 @@
 
 # Log Generator with Elastic Agent Integration - Kubernetes Installation Script
 # ------------------------------------------------------------------
-# This script installs the log generator with Elastic agent integration 
-# in a Kubernetes cluster.
+# This script is a wrapper that calls the Python installer script
 
 set -e
 
@@ -24,7 +23,7 @@ NAMESPACE="default"
 IMAGE_TAG="latest"
 SKIP_TOKEN_GENERATION=false
 DEBUG=false
-FORCE_SKIP_TOKEN=false  # New flag to force skipping tokens on errors
+FORCE_SKIP_TOKEN=false
 
 # Function to display script usage
 display_usage() {
@@ -102,378 +101,76 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Debug function
-debug_log() {
-  if [[ "$DEBUG" == "true" ]]; then
-    echo -e "${YELLOW}[DEBUG] $1${NC}"
-  fi
-}
-
 # Function to check if a command exists
 command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Check if file exists with better error messaging
-check_file_exists() {
-  local file_path="$1"
-  local file_desc="$2"
-  
-  if [[ ! -f "$file_path" ]]; then
-    echo -e "${RED}Error: $file_desc file not found at $file_path${NC}"
-    debug_log "Current directory is $(pwd)"
-    debug_log "Directory listing: $(ls -la $(dirname "$file_path"))"
-    return 1
-  fi
-  
-  debug_log "File $file_path exists"
-  return 0
-}
-
-# Check prerequisites
-echo -e "\n${BLUE}Checking prerequisites...${NC}"
-
-if ! command_exists kubectl; then
-  echo -e "${RED}Error: kubectl is required but not installed. Please install kubectl and try again.${NC}"
-  exit 1
-fi
-
-if ! command_exists curl; then
-  echo -e "${RED}Error: curl is required but not installed. Please install curl and try again.${NC}"
-  exit 1
-fi
-
-if ! command_exists jq; then
-  echo -e "${YELLOW}Warning: jq is not installed. Installing it for JSON processing...${NC}"
-  if command_exists apt-get; then
-    sudo apt-get update && sudo apt-get install -y jq
-  elif command_exists brew; then
-    brew install jq
-  elif command_exists yum; then
-    sudo yum install -y jq
-  else
-    echo -e "${RED}Error: Could not install jq. Please install it manually and try again.${NC}"
-    exit 1
-  fi
-fi
-
 # Check for Python
+echo -e "\n${BLUE}Checking for Python...${NC}"
 if ! command_exists python3; then
   echo -e "${RED}Error: Python 3 is required but not installed. Please install Python 3 and try again.${NC}"
   exit 1
 fi
 
-# Verify connection to Kubernetes cluster
-echo -e "${BLUE}Verifying Kubernetes cluster connection...${NC}"
-if ! kubectl cluster-info &>/dev/null; then
-  echo -e "${RED}Error: Unable to connect to Kubernetes cluster. Please check your kubeconfig.${NC}"
-  exit 1
+# Check for Python dependencies
+echo -e "\n${BLUE}Checking Python dependencies...${NC}"
+PYTHON_DEPS_OK=false
+if python3 -c "import pkg_resources; pkg_resources.require(['requests', 'kubernetes'])" 2>/dev/null; then
+  PYTHON_DEPS_OK=true
 fi
 
-# Create namespace if it doesn't exist and it's not the default namespace
-if [[ "$NAMESPACE" != "default" ]]; then
-  echo -e "\n${BLUE}Creating namespace $NAMESPACE if it doesn't exist...${NC}"
-  kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-fi
-
-# Check if secret exists and delete it if found
-echo -e "\n${BLUE}Checking for existing Elasticsearch credentials secret...${NC}"
-if kubectl get secret elasticsearch-credentials -n "$NAMESPACE" &>/dev/null; then
-  echo -e "${YELLOW}Found existing secret 'elasticsearch-credentials'. Deleting it...${NC}"
-  kubectl delete secret elasticsearch-credentials -n "$NAMESPACE"
-  echo -e "${GREEN}Existing secret deleted successfully.${NC}"
-else
-  echo -e "${BLUE}No existing secret found. Creating new secret...${NC}"
-fi
-
-# Create secret for Elasticsearch credentials
-echo -e "\n${BLUE}Creating Elasticsearch credentials secret...${NC}"
-kubectl create secret generic elasticsearch-credentials \
-  --namespace "$NAMESPACE" \
-  --from-literal=ELASTICSEARCH_USER="$ELASTICSEARCH_USER" \
-  --from-literal=ELASTICSEARCH_PASSWORD="$ELASTICSEARCH_PASSWORD" \
-  --from-literal=KIBANA_URL="$KIBANA_URL" \
-  --from-literal=ELASTICSEARCH_URL="$ELASTICSEARCH_URL" \
-  --from-literal=FLEET_URL="$FLEET_URL" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-echo -e "${GREEN}Secret created successfully.${NC}"
-
-# Generate enrollment tokens if not skipped
-if [[ "$SKIP_TOKEN_GENERATION" == "false" ]]; then
-  echo -e "\n${BLUE}Setting up Elastic Agent policies and generating enrollment tokens...${NC}"
+if [ "$PYTHON_DEPS_OK" = false ]; then
+  echo -e "${YELLOW}Installing required Python packages...${NC}"
+  python3 -m pip install requests kubernetes
   
-  # Check if the Python script exists and initialize token variables
-  mysql_token="EXAMPLE_MYSQL_TOKEN_PLACEHOLDER"
-  nginx_frontend_token="EXAMPLE_NGINX_FRONTEND_TOKEN_PLACEHOLDER"
-  nginx_backend_token="EXAMPLE_NGINX_BACKEND_TOKEN_PLACEHOLDER"
-  
-  SCRIPT_PATH="./install-elastic-agent.py"
-  if ! check_file_exists "$SCRIPT_PATH" "Python installer script"; then
-    echo -e "${RED}Error: Python installer script not found at $SCRIPT_PATH${NC}"
-    echo -e "${YELLOW}Continuing with placeholder tokens...${NC}"
-  else
-    # Ensure the script is executable
-    if [[ ! -x "$SCRIPT_PATH" ]]; then
-      echo -e "${YELLOW}Making Python script executable...${NC}"
-      chmod +x "$SCRIPT_PATH"
-      if [[ $? -ne 0 ]]; then
-        echo -e "${RED}Error: Failed to make Python script executable${NC}"
-        echo -e "${YELLOW}Continuing with placeholder tokens...${NC}"
-      fi
-    fi
-    
-    # Check Python dependencies
-    echo -e "${BLUE}Checking Python dependencies...${NC}"
-    PYTHON_DEPS_CHECK=$(python3 -c "
-import sys
-try:
-    import requests
-    import json
-    print('OK')
-except ImportError as e:
-    print(f'Missing dependency: {str(e)}')
-    sys.exit(1)
-" 2>&1)
-
-    if [[ "$PYTHON_DEPS_CHECK" != "OK" ]]; then
-      echo -e "${RED}Python dependency check failed: ${PYTHON_DEPS_CHECK}${NC}"
-      echo -e "${YELLOW}Attempting to install required Python packages...${NC}"
-      
-      python3 -m pip install requests || {
-        echo -e "${RED}Failed to install required Python packages${NC}"
-        echo -e "${YELLOW}Continuing with placeholder tokens...${NC}"
-      }
-    else
-      echo -e "${GREEN}Python dependencies check passed${NC}"
-      
-      BASE_DIR=$(pwd)
-      
-      # Initialize a variable to track if we should skip remaining tokens
-      SKIP_REMAINING_TOKENS=false
-      
-      # Run the script for MySQL policy
-      echo -e "${BLUE}Setting up MySQL policy and generating token...${NC}"
-      if [[ "$DEBUG" == "true" ]]; then
-        echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type mysql --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
-      fi
-      
-      # Use timeout command with 30 seconds
-      echo -e "${BLUE}Running with a 30 second timeout...${NC}"
-      mysql_token=$(timeout 30 python3 "$SCRIPT_PATH" \
-        --kibana-url "$KIBANA_URL" \
-        --fleet-url "$FLEET_URL" \
-        --username "$ELASTICSEARCH_USER" \
-        --password "$ELASTICSEARCH_PASSWORD" \
-        --client-type "mysql" \
-        --namespace "$NAMESPACE" \
-        --base-dir "$BASE_DIR" \
-        --output-token 2>&1)
-      
-      TIMEOUT_STATUS=$?
-      if [ $TIMEOUT_STATUS -eq 124 ]; then
-        echo -e "${RED}Error: Python script execution timed out after 30 seconds${NC}"
-        mysql_token=""
-        if [ "$FORCE_SKIP_TOKEN" = true ]; then
-          echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-          # Skip to the ConfigMap creation with placeholder tokens
-          SKIP_REMAINING_TOKENS=true
-        fi
-      elif [[ "$mysql_token" == *"error"* || "$mysql_token" == *"Error"* || "$mysql_token" == *"Traceback"* ]]; then
-        echo -e "${RED}Error running MySQL enrollment token generation:${NC}"
-        echo -e "${RED}$mysql_token${NC}"
-        if [ "$FORCE_SKIP_TOKEN" = true ]; then
-          echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-          # Skip to the ConfigMap creation with placeholder tokens
-          SKIP_REMAINING_TOKENS=true
-        fi
-      elif [[ -n "$mysql_token" ]]; then
-        echo -e "${GREEN}Successfully generated MySQL enrollment token${NC}"
-      else
-        echo -e "${RED}Failed to generate MySQL enrollment token${NC}"
-        if [ "$FORCE_SKIP_TOKEN" = true ]; then
-          echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-          # Skip to the ConfigMap creation with placeholder tokens
-          SKIP_REMAINING_TOKENS=true
-        fi
-      fi
-      
-      # Only proceed with Nginx Frontend if we didn't skip
-      if [ -z "$SKIP_REMAINING_TOKENS" ]; then
-        # Run the script for Nginx Frontend policy
-        echo -e "${BLUE}Setting up Nginx Frontend policy and generating token...${NC}"
-        if [[ "$DEBUG" == "true" ]]; then
-          echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-frontend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
-        fi
-        
-        # Use timeout command with 30 seconds
-        echo -e "${BLUE}Running with a 30 second timeout...${NC}"
-        nginx_frontend_token=$(timeout 30 python3 "$SCRIPT_PATH" \
-          --kibana-url "$KIBANA_URL" \
-          --fleet-url "$FLEET_URL" \
-          --username "$ELASTICSEARCH_USER" \
-          --password "$ELASTICSEARCH_PASSWORD" \
-          --client-type "nginx-frontend" \
-          --namespace "$NAMESPACE" \
-          --base-dir "$BASE_DIR" \
-          --output-token 2>&1)
-        
-        TIMEOUT_STATUS=$?
-        if [ $TIMEOUT_STATUS -eq 124 ]; then
-          echo -e "${RED}Error: Python script execution timed out after 30 seconds${NC}"
-          nginx_frontend_token=""
-          if [ "$FORCE_SKIP_TOKEN" = true ]; then
-            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-            # Skip to the ConfigMap creation with placeholder tokens
-            SKIP_REMAINING_TOKENS=true
-          fi
-        elif [[ "$nginx_frontend_token" == *"error"* || "$nginx_frontend_token" == *"Error"* || "$nginx_frontend_token" == *"Traceback"* ]]; then
-          echo -e "${RED}Error running Nginx Frontend enrollment token generation:${NC}"
-          echo -e "${RED}$nginx_frontend_token${NC}"
-          if [ "$FORCE_SKIP_TOKEN" = true ]; then
-            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-            # Skip to the ConfigMap creation with placeholder tokens
-            SKIP_REMAINING_TOKENS=true
-          fi
-        elif [[ -n "$nginx_frontend_token" ]]; then
-          echo -e "${GREEN}Successfully generated Nginx Frontend enrollment token${NC}"
-        else
-          echo -e "${RED}Failed to generate Nginx Frontend enrollment token${NC}"
-          if [ "$FORCE_SKIP_TOKEN" = true ]; then
-            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-            # Skip to the ConfigMap creation with placeholder tokens
-            SKIP_REMAINING_TOKENS=true
-          fi
-        fi
-      fi
-      
-      # Only proceed with Nginx Backend if we didn't skip
-      if [ -z "$SKIP_REMAINING_TOKENS" ]; then
-        # Run the script for Nginx Backend policy
-        echo -e "${BLUE}Setting up Nginx Backend policy and generating token...${NC}"
-        if [[ "$DEBUG" == "true" ]]; then
-          echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-backend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
-        fi
-        
-        # Use timeout command with 30 seconds
-        echo -e "${BLUE}Running with a 30 second timeout...${NC}"
-        nginx_backend_token=$(timeout 30 python3 "$SCRIPT_PATH" \
-          --kibana-url "$KIBANA_URL" \
-          --fleet-url "$FLEET_URL" \
-          --username "$ELASTICSEARCH_USER" \
-          --password "$ELASTICSEARCH_PASSWORD" \
-          --client-type "nginx-backend" \
-          --namespace "$NAMESPACE" \
-          --base-dir "$BASE_DIR" \
-          --output-token 2>&1)
-        
-        TIMEOUT_STATUS=$?
-        if [ $TIMEOUT_STATUS -eq 124 ]; then
-          echo -e "${RED}Error: Python script execution timed out after 30 seconds${NC}"
-          nginx_backend_token=""
-          if [ "$FORCE_SKIP_TOKEN" = true ]; then
-            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-            # Skip to the ConfigMap creation with placeholder tokens
-            SKIP_REMAINING_TOKENS=true
-          fi
-        elif [[ "$nginx_backend_token" == *"error"* || "$nginx_backend_token" == *"Error"* || "$nginx_backend_token" == *"Traceback"* ]]; then
-          echo -e "${RED}Error running Nginx Backend enrollment token generation:${NC}"
-          echo -e "${RED}$nginx_backend_token${NC}"
-          if [ "$FORCE_SKIP_TOKEN" = true ]; then
-            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-            # Skip to the ConfigMap creation with placeholder tokens
-            SKIP_REMAINING_TOKENS=true
-          fi
-        elif [[ -n "$nginx_backend_token" ]]; then
-          echo -e "${GREEN}Successfully generated Nginx Backend enrollment token${NC}"
-        else
-          echo -e "${RED}Failed to generate Nginx Backend enrollment token${NC}"
-          if [ "$FORCE_SKIP_TOKEN" = true ]; then
-            echo -e "${YELLOW}Force skip token enabled. Skipping remaining token generation.${NC}"
-            # Skip to the ConfigMap creation with placeholder tokens
-            SKIP_REMAINING_TOKENS=true
-          fi
-        fi
-      fi
-    fi
+  # Verify installation was successful
+  if ! python3 -c "import requests, kubernetes" 2>/dev/null; then
+    echo -e "${RED}Failed to install required Python packages. Please install them manually:${NC}"
+    echo -e "${YELLOW}pip install requests kubernetes${NC}"
+    exit 1
   fi
-  
-  # Check if enrollment tokens ConfigMap exists and delete it
-  echo -e "\n${BLUE}Checking for existing enrollment tokens ConfigMap...${NC}"
-  if kubectl get configmap enrollment-tokens -n "$NAMESPACE" &>/dev/null; then
-    echo -e "${YELLOW}Found existing ConfigMap 'enrollment-tokens'. Deleting it...${NC}"
-    kubectl delete configmap enrollment-tokens -n "$NAMESPACE"
-    echo -e "${GREEN}Existing ConfigMap deleted successfully.${NC}"
-  fi
-  
-  # Create ConfigMap with enrollment tokens
-  echo -e "\n${BLUE}Creating enrollment tokens ConfigMap...${NC}"
-  kubectl create configmap enrollment-tokens \
-    --namespace "$NAMESPACE" \
-    --from-literal=mysql-enrollment-token="$mysql_token" \
-    --from-literal=nginx-frontend-enrollment-token="$nginx_frontend_token" \
-    --from-literal=nginx-backend-enrollment-token="$nginx_backend_token" \
-    --dry-run=client -o yaml | kubectl apply -f -
-  
-  echo -e "${GREEN}Enrollment tokens ConfigMap created successfully.${NC}"
+  echo -e "${GREEN}Python dependencies installed successfully.${NC}"
+fi
+
+# Make sure the Python script is executable
+SCRIPT_PATH="./install-elastic-agent.py"
+if [[ ! -x "$SCRIPT_PATH" ]]; then
+  echo -e "${YELLOW}Making Python script executable...${NC}"
+  chmod +x "$SCRIPT_PATH"
+fi
+
+# Build Python arguments
+PYTHON_ARGS=(
+  "--kibana-url" "$KIBANA_URL"
+  "--elasticsearch-url" "$ELASTICSEARCH_URL"
+  "--fleet-url" "$FLEET_URL"
+  "--username" "$ELASTICSEARCH_USER"
+  "--password" "$ELASTICSEARCH_PASSWORD"
+  "--namespace" "$NAMESPACE"
+  "--image-tag" "$IMAGE_TAG"
+)
+
+if [[ "$SKIP_TOKEN_GENERATION" == "true" ]]; then
+  PYTHON_ARGS+=("--skip-token-generation")
+fi
+
+if [[ "$FORCE_SKIP_TOKEN" == "true" ]]; then
+  PYTHON_ARGS+=("--force-skip-token")
+fi
+
+if [[ "$DEBUG" == "true" ]]; then
+  PYTHON_ARGS+=("--debug")
+fi
+
+# Execute the Python script with all arguments
+echo -e "\n${BLUE}Executing Python installer script...${NC}"
+python3 "$SCRIPT_PATH" "${PYTHON_ARGS[@]}"
+
+# Check script exit status
+if [[ $? -eq 0 ]]; then
+  echo -e "\n${GREEN}Installation completed successfully!${NC}"
 else
-  echo -e "${YELLOW}Skipping enrollment token generation as requested.${NC}"
-fi
-
-# Check if the deployment file exists
-DEPLOYMENT_FILE="kubernetes/elastic-agents.yaml"
-
-if ! check_file_exists "$DEPLOYMENT_FILE" "Deployment"; then
-  echo -e "${RED}Error: Deployment file $DEPLOYMENT_FILE not found.${NC}"
+  echo -e "\n${RED}Installation failed!${NC}"
   exit 1
-fi
-
-# Update the image tag in the deployment file if necessary
-if [ "$IMAGE_TAG" != "latest" ]; then
-  echo -e "\n${BLUE}Updating image tag to $IMAGE_TAG in deployment file...${NC}"
-  TMP_FILE=$(mktemp)
-  sed "s|djhope99/log-generator:latest|djhope99/log-generator:$IMAGE_TAG|g" "$DEPLOYMENT_FILE" > "$TMP_FILE"
-  DEPLOYMENT_FILE="$TMP_FILE"
-fi
-
-# Deploy log clients
-echo -e "\n${BLUE}Deploying log clients...${NC}"
-kubectl apply -f "$DEPLOYMENT_FILE" --namespace "$NAMESPACE"
-echo -e "${GREEN}Log clients deployed successfully.${NC}"
-
-# Clean up temporary file if created
-if [ -n "$TMP_FILE" ]; then
-  rm -f "$TMP_FILE"
-fi
-
-# Verify deployment
-echo -e "\n${BLUE}Verifying deployment...${NC}"
-kubectl get deployments --namespace "$NAMESPACE" -l "app in (mysql-log-client,nginx-backend-log-client,nginx-frontend-log-client)"
-
-# Wait for pods to be ready
-echo -e "\n${BLUE}Waiting for pods to be ready...${NC}"
-kubectl wait --for=condition=ready pod \
-  --selector="app in (mysql-log-client,nginx-backend-log-client,nginx-frontend-log-client)" \
-  --timeout=300s \
-  --namespace "$NAMESPACE" || {
-    echo -e "${YELLOW}Warning: Not all pods are ready after 5 minutes.${NC}"
-    echo -e "${YELLOW}Check the status of your pods with:${NC}"
-    echo -e "${YELLOW}kubectl get pods -n $NAMESPACE${NC}"
-  }
-
-echo -e "\n${GREEN}Installation complete!${NC}"
-echo -e "\n${BLUE}To check the logs of your pods, use these commands:${NC}"
-echo -e "kubectl logs -n $NAMESPACE -l app=mysql-log-client -c mysql-log-generator"
-echo -e "kubectl logs -n $NAMESPACE -l app=nginx-backend-log-client -c nginx-backend-log-generator"
-echo -e "kubectl logs -n $NAMESPACE -l app=nginx-frontend-log-client -c nginx-frontend-log-generator"
-
-echo -e "\n${BLUE}To check the Elastic Agent logs:${NC}"
-echo -e "kubectl logs -n $NAMESPACE -l app=mysql-log-client -c elastic-agent"
-echo -e "kubectl logs -n $NAMESPACE -l app=nginx-backend-log-client -c elastic-agent"
-echo -e "kubectl logs -n $NAMESPACE -l app=nginx-frontend-log-client -c elastic-agent"
-
-echo -e "\n${BLUE}To access your Elastic stack:${NC}"
-echo -e "Kibana URL: $KIBANA_URL"
-echo -e "Elasticsearch URL: $ELASTICSEARCH_URL"
-echo -e "Username: $ELASTICSEARCH_USER"
-echo -e "\n${GREEN}Thank you for using the Log Generator with Elastic Agent Integration!${NC}" 
+fi 
