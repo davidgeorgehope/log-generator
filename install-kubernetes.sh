@@ -197,70 +197,130 @@ echo -e "${GREEN}Secret created successfully.${NC}"
 if [[ "$SKIP_TOKEN_GENERATION" == "false" ]]; then
   echo -e "\n${BLUE}Setting up Elastic Agent policies and generating enrollment tokens...${NC}"
   
-  # Check if the Python script exists
+  # Check if the Python script exists and initialize token variables
+  mysql_token="EXAMPLE_MYSQL_TOKEN_PLACEHOLDER"
+  nginx_frontend_token="EXAMPLE_NGINX_FRONTEND_TOKEN_PLACEHOLDER"
+  nginx_backend_token="EXAMPLE_NGINX_BACKEND_TOKEN_PLACEHOLDER"
+  
   SCRIPT_PATH="./install-elastic-agent.py"
   if ! check_file_exists "$SCRIPT_PATH" "Python installer script"; then
     echo -e "${RED}Error: Python installer script not found at $SCRIPT_PATH${NC}"
-    exit 1
-  fi
-  
-  BASE_DIR=$(pwd)
-  
-  # Run the script for MySQL policy
-  echo -e "${BLUE}Setting up MySQL policy and generating token...${NC}"
-  mysql_token=$(python3 "$SCRIPT_PATH" \
-    --kibana-url "$KIBANA_URL" \
-    --fleet-url "$FLEET_URL" \
-    --username "$ELASTICSEARCH_USER" \
-    --password "$ELASTICSEARCH_PASSWORD" \
-    --client-type "mysql" \
-    --namespace "$NAMESPACE" \
-    --base-dir "$BASE_DIR" \
-    --output-token)
-    
-  if [[ -n "$mysql_token" ]]; then
-    echo -e "${GREEN}Successfully generated MySQL enrollment token${NC}"
+    echo -e "${YELLOW}Continuing with placeholder tokens...${NC}"
   else
-    echo -e "${RED}Failed to generate MySQL enrollment token${NC}"
-    mysql_token="EXAMPLE_MYSQL_TOKEN_PLACEHOLDER"
-  fi
-  
-  # Run the script for Nginx Frontend policy
-  echo -e "${BLUE}Setting up Nginx Frontend policy and generating token...${NC}"
-  nginx_frontend_token=$(python3 "$SCRIPT_PATH" \
-    --kibana-url "$KIBANA_URL" \
-    --fleet-url "$FLEET_URL" \
-    --username "$ELASTICSEARCH_USER" \
-    --password "$ELASTICSEARCH_PASSWORD" \
-    --client-type "nginx-frontend" \
-    --namespace "$NAMESPACE" \
-    --base-dir "$BASE_DIR" \
-    --output-token)
+    # Ensure the script is executable
+    if [[ ! -x "$SCRIPT_PATH" ]]; then
+      echo -e "${YELLOW}Making Python script executable...${NC}"
+      chmod +x "$SCRIPT_PATH"
+      if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Error: Failed to make Python script executable${NC}"
+        echo -e "${YELLOW}Continuing with placeholder tokens...${NC}"
+      fi
+    fi
     
-  if [[ -n "$nginx_frontend_token" ]]; then
-    echo -e "${GREEN}Successfully generated Nginx Frontend enrollment token${NC}"
-  else
-    echo -e "${RED}Failed to generate Nginx Frontend enrollment token${NC}"
-    nginx_frontend_token="EXAMPLE_NGINX_FRONTEND_TOKEN_PLACEHOLDER"
-  fi
-  
-  # Run the script for Nginx Backend policy
-  echo -e "${BLUE}Setting up Nginx Backend policy and generating token...${NC}"
-  nginx_backend_token=$(python3 "$SCRIPT_PATH" \
-    --kibana-url "$KIBANA_URL" \
-    --fleet-url "$FLEET_URL" \
-    --username "$ELASTICSEARCH_USER" \
-    --password "$ELASTICSEARCH_PASSWORD" \
-    --client-type "nginx-backend" \
-    --namespace "$NAMESPACE" \
-    --base-dir "$BASE_DIR" \
-    --output-token)
-    
-  if [[ -n "$nginx_backend_token" ]]; then
-    echo -e "${GREEN}Successfully generated Nginx Backend enrollment token${NC}"
-  else
-    echo -e "${RED}Failed to generate Nginx Backend enrollment token${NC}"
-    nginx_backend_token="EXAMPLE_NGINX_BACKEND_TOKEN_PLACEHOLDER"
+    # Check Python dependencies
+    echo -e "${BLUE}Checking Python dependencies...${NC}"
+    PYTHON_DEPS_CHECK=$(python3 -c "
+import sys
+try:
+    import requests
+    import json
+    print('OK')
+except ImportError as e:
+    print(f'Missing dependency: {str(e)}')
+    sys.exit(1)
+" 2>&1)
+
+    if [[ "$PYTHON_DEPS_CHECK" != "OK" ]]; then
+      echo -e "${RED}Python dependency check failed: ${PYTHON_DEPS_CHECK}${NC}"
+      echo -e "${YELLOW}Attempting to install required Python packages...${NC}"
+      
+      python3 -m pip install requests || {
+        echo -e "${RED}Failed to install required Python packages${NC}"
+        echo -e "${YELLOW}Continuing with placeholder tokens...${NC}"
+      }
+    else
+      echo -e "${GREEN}Python dependencies check passed${NC}"
+      
+      BASE_DIR=$(pwd)
+      
+      # Run the script for MySQL policy
+      echo -e "${BLUE}Setting up MySQL policy and generating token...${NC}"
+      if [[ "$DEBUG" == "true" ]]; then
+        echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type mysql --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
+      fi
+      
+      mysql_token=$(python3 "$SCRIPT_PATH" \
+        --kibana-url "$KIBANA_URL" \
+        --fleet-url "$FLEET_URL" \
+        --username "$ELASTICSEARCH_USER" \
+        --password "$ELASTICSEARCH_PASSWORD" \
+        --client-type "mysql" \
+        --namespace "$NAMESPACE" \
+        --base-dir "$BASE_DIR" \
+        --output-token 2>&1)
+        
+      # Check if the output contains an error message
+      if [[ "$mysql_token" == *"error"* || "$mysql_token" == *"Error"* || "$mysql_token" == *"Traceback"* ]]; then
+        echo -e "${RED}Error running MySQL enrollment token generation:${NC}"
+        echo -e "${RED}$mysql_token${NC}"
+      elif [[ -n "$mysql_token" ]]; then
+        echo -e "${GREEN}Successfully generated MySQL enrollment token${NC}"
+      else
+        echo -e "${RED}Failed to generate MySQL enrollment token${NC}"
+      fi
+      
+      # Run the script for Nginx Frontend policy
+      echo -e "${BLUE}Setting up Nginx Frontend policy and generating token...${NC}"
+      if [[ "$DEBUG" == "true" ]]; then
+        echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-frontend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
+      fi
+      
+      nginx_frontend_token=$(python3 "$SCRIPT_PATH" \
+        --kibana-url "$KIBANA_URL" \
+        --fleet-url "$FLEET_URL" \
+        --username "$ELASTICSEARCH_USER" \
+        --password "$ELASTICSEARCH_PASSWORD" \
+        --client-type "nginx-frontend" \
+        --namespace "$NAMESPACE" \
+        --base-dir "$BASE_DIR" \
+        --output-token 2>&1)
+        
+      # Check if the output contains an error message
+      if [[ "$nginx_frontend_token" == *"error"* || "$nginx_frontend_token" == *"Error"* || "$nginx_frontend_token" == *"Traceback"* ]]; then
+        echo -e "${RED}Error running Nginx Frontend enrollment token generation:${NC}"
+        echo -e "${RED}$nginx_frontend_token${NC}"
+      elif [[ -n "$nginx_frontend_token" ]]; then
+        echo -e "${GREEN}Successfully generated Nginx Frontend enrollment token${NC}"
+      else
+        echo -e "${RED}Failed to generate Nginx Frontend enrollment token${NC}"
+      fi
+      
+      # Run the script for Nginx Backend policy
+      echo -e "${BLUE}Setting up Nginx Backend policy and generating token...${NC}"
+      if [[ "$DEBUG" == "true" ]]; then
+        echo -e "${YELLOW}[DEBUG] Running: python3 $SCRIPT_PATH --kibana-url $KIBANA_URL --fleet-url $FLEET_URL --username $ELASTICSEARCH_USER --password *** --client-type nginx-backend --namespace $NAMESPACE --base-dir $BASE_DIR --output-token${NC}"
+      fi
+      
+      nginx_backend_token=$(python3 "$SCRIPT_PATH" \
+        --kibana-url "$KIBANA_URL" \
+        --fleet-url "$FLEET_URL" \
+        --username "$ELASTICSEARCH_USER" \
+        --password "$ELASTICSEARCH_PASSWORD" \
+        --client-type "nginx-backend" \
+        --namespace "$NAMESPACE" \
+        --base-dir "$BASE_DIR" \
+        --output-token 2>&1)
+        
+      # Check if the output contains an error message
+      if [[ "$nginx_backend_token" == *"error"* || "$nginx_backend_token" == *"Error"* || "$nginx_backend_token" == *"Traceback"* ]]; then
+        echo -e "${RED}Error running Nginx Backend enrollment token generation:${NC}"
+        echo -e "${RED}$nginx_backend_token${NC}"
+      elif [[ -n "$nginx_backend_token" ]]; then
+        echo -e "${GREEN}Successfully generated Nginx Backend enrollment token${NC}"
+      else
+        echo -e "${RED}Failed to generate Nginx Backend enrollment token${NC}"
+      fi
+    fi
   fi
   
   # Check if enrollment tokens ConfigMap exists and delete it
