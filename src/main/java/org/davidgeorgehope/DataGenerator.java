@@ -229,7 +229,7 @@ public class DataGenerator {
             MySQLGeneralLogGenerator.generateGeneralLogs(
                 1,
                 mysqlLogDir + "/mysql.log",
-                mysqlStdoutPort
+                mysqlErrorPort
             );
         }, 0, 5, TimeUnit.SECONDS);
 

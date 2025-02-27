@@ -21,6 +21,7 @@ public class MySQLLogClient {
     private static final String LOG_DIR = System.getenv().getOrDefault("LOG_DIRECTORY", "/var/log/mysql");
     private static final String ERROR_LOG = "error.log";
     private static final String SLOW_LOG = "mysql-slow.log";
+    private static final int LOG_RETENTION_DAYS = 1; // Keep logs for 1 day
 
     public static void main(String[] args) {
         if (args.length < 2) {
@@ -73,28 +74,31 @@ public class MySQLLogClient {
         try {
             logger.info("Connecting to " + hostName + ":" + port + " for " + (isError ? "error" : "slow query") + " logs");
             String logFile = isError ? ERROR_LOG : SLOW_LOG;
-            Path logPath = Paths.get(LOG_DIR, logFile);
-            
-            logger.info("Writing logs to: " + logPath);
             
             while (!Thread.currentThread().isInterrupted()) {
                 try (Socket socket = new Socket(hostName, port);
-                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                     PrintWriter writer = new PrintWriter(new FileWriter(logPath.toString(), true))) {
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
                     
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                         String logEntry = line;
-                        
-                        // Write to file
-                        writer.println(logEntry);
-                        writer.flush();
-                        
-                        // Also output to console for debugging
-                        if (isError) {
-                            System.err.println(logEntry);
-                        } else {
-                            System.out.println(logEntry);
+                    // Rotate logs and get the current log file path
+                    Path logPath = LogRotationUtil.rotateAndCleanupLogs(LOG_DIR, logFile, LOG_RETENTION_DAYS);
+                    logger.info("Writing logs to: " + logPath);
+                    
+                    // Use try-with-resources for the file writer to ensure it's closed properly
+                    try (PrintWriter writer = new PrintWriter(new FileWriter(logPath.toString(), true))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            String logEntry = line;
+                            
+                            // Write to file
+                            writer.println(logEntry);
+                            writer.flush();
+                            
+                            // Also output to console for debugging
+                            if (isError) {
+                                System.err.println(logEntry);
+                            } else {
+                                System.out.println(logEntry);
+                            }
                         }
                     }
                 } catch (IOException e) {
