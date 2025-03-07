@@ -247,30 +247,9 @@ def get_auth_headers():
         return headers, (config['elasticsearch_user'], config['elasticsearch_password'])
 
 def wait_for_kibana():
-    """Wait for Kibana to be available."""
-    print(f"\n{BLUE}Waiting for Kibana to be available...{NC}")
-    
-    headers, auth = get_auth_headers()
-    url = f"{config['kibana_url']}/api/status"
-    
-    for attempt in range(config['max_retries']):
-        try:
-            if auth:
-                response = requests.get(url, headers=headers, auth=auth, verify=config['verify_ssl'])
-            else:
-                response = requests.get(url, headers=headers, verify=config['verify_ssl'])
-                
-            if response.status_code == 200:
-                print(f"{GREEN}Kibana is available!{NC}")
-                return True
-        except Exception as e:
-            debug_log(f"Error connecting to Kibana: {str(e)}")
-        
-        print(f"{YELLOW}Waiting for Kibana to be ready (attempt {attempt + 1}/{config['max_retries']})...{NC}")
-        time.sleep(config['retry_delay'])
-    
-    print(f"{RED}Timed out waiting for Kibana to be ready.{NC}")
-    return False
+    """No longer needed for serverless deployment, always returns True."""
+    print(f"\n{BLUE}Using Elastic serverless deployment - no need to wait for Kibana{NC}")
+    return True
 
 def get_agent_policy_id(policy_name):
     """Get the ID of an agent policy by name."""
@@ -694,18 +673,11 @@ if __name__ == "__main__":
             print(f"{RED}Error: --client-type must be specified when using --output-token{NC}")
             sys.exit(1)
         
-        # Wait for Kibana to be available
-        if not wait_for_kibana():
-            sys.exit(1)
-        
-        # Generate enrollment token
+        # Generate enrollment token (no need to wait for Kibana in serverless)
         enrollment_token = generate_enrollment_token(config['client_type'])
         if enrollment_token:
             print(enrollment_token)  # Print only the token for scripting
             sys.exit(0)
-        else:
-            logger.error(f"Failed to generate enrollment token for {config['client_type']}")
-            sys.exit(1)
     else:
         # Run the full installation
         main() 
