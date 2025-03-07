@@ -298,7 +298,17 @@ def create_agent_policies(agent_policies_dir, client_type):
         print(f"{RED}Agent policies directory not found: {agent_policies_dir}{NC}")
         return None
     
-    policy_file = os.path.join(agent_policies_dir, f"{client_type}.json")
+    # Map client type to the correct policy file name
+    if client_type == 'mysql':
+        policy_file = os.path.join(agent_policies_dir, "mysql-agent-policy.json")
+    elif client_type == 'nginx-frontend':
+        policy_file = os.path.join(agent_policies_dir, "nginx-frontend-agent-policy.json")
+    elif client_type == 'nginx-backend':
+        policy_file = os.path.join(agent_policies_dir, "nginx-backend-agent-policy.json")
+    else:
+        print(f"{RED}Unknown client type: {client_type}{NC}")
+        return None
+    
     if not os.path.exists(policy_file):
         print(f"{RED}Policy file not found: {policy_file}{NC}")
         return None
@@ -344,15 +354,30 @@ def install_integration(integrations_dir, client_type):
         print(f"{RED}Integrations directory not found: {integrations_dir}{NC}")
         return False
     
-    integration_file = os.path.join(integrations_dir, f"{client_type}.json")
+    # Map client type to integration file name
+    if client_type == 'mysql':
+        integration_file = os.path.join(integrations_dir, "mysql.json")
+    elif client_type == 'nginx-frontend':
+        integration_file = os.path.join(integrations_dir, "nginx-frontend.json")
+    elif client_type == 'nginx-backend':
+        integration_file = os.path.join(integrations_dir, "nginx-backend.json")
+    else:
+        print(f"{RED}Unknown client type: {client_type}{NC}")
+        return False
+    
     if not os.path.exists(integration_file):
         print(f"{RED}Integration file not found: {integration_file}{NC}")
         return False
     
-    # Get the agent policy ID
-    policy_id = get_policy_by_client_type(client_type)
+    # Get the agent policy ID (get the policy name first, then get its ID)
+    policy_name = get_policy_by_client_type(client_type)
+    if not policy_name:
+        print(f"{RED}Failed to get agent policy name for client type: {client_type}{NC}")
+        return False
+        
+    policy_id = get_agent_policy_id(policy_name)
     if not policy_id:
-        print(f"{RED}Failed to get agent policy ID for client type: {client_type}{NC}")
+        print(f"{RED}Failed to get agent policy ID for policy name: {policy_name}{NC}")
         return False
     
     print(f"{BLUE}Installing integration from {integration_file} to policy ID {policy_id}...{NC}")
@@ -386,10 +411,17 @@ def install_integration(integrations_dir, client_type):
 
 def generate_enrollment_token(client_type):
     """Generate an enrollment token for a specific client type."""
-    # Get the agent policy ID
-    policy_id = get_policy_by_client_type(client_type)
+    # Get the agent policy ID (get the policy name first, then get its ID)
+    policy_name = get_policy_by_client_type(client_type)
+    if not policy_name:
+        logger.error(f"Failed to get agent policy name for client type: {client_type}")
+        if config['force_skip_token']:
+            return None
+        sys.exit(1)
+    
+    policy_id = get_agent_policy_id(policy_name)
     if not policy_id:
-        logger.error(f"Failed to get agent policy ID for client type: {client_type}")
+        logger.error(f"Failed to get agent policy ID for policy name: {policy_name}")
         if config['force_skip_token']:
             return None
         sys.exit(1)
