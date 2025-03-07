@@ -383,55 +383,33 @@ def install_integration(integrations_dir, client_type):
     print(f"{BLUE}Installing integration from {integration_file} to policy ID {policy_id}...{NC}")
     
     try:
+        # Load the integration configuration from the JSON file
         with open(integration_file, 'r') as f:
-            integration_file_data = json.load(f)
+            integration_config = json.load(f)
         
-        # Extract package_policy from the integration file
-        if 'package_policy' not in integration_file_data:
-            print(f"{RED}Integration file does not contain package_policy: {integration_file}{NC}")
+        # Get agent policy name from the config
+        agent_policy_name = integration_config.get('agent_policy_name')
+        if not agent_policy_name:
+            print(f"{RED}No 'agent_policy_name' specified in {integration_file}{NC}")
             return False
-            
-        # Create a properly formatted package policy
-        package_policy = integration_file_data['package_policy']
-        package_policy['policy_id'] = policy_id
-        
-        # Ensure all necessary components are present in the package policy
-        if 'inputs' in package_policy:
-            # Convert inputs from object to array format which the API expects
-            inputs = []
-            for input_type, input_config in package_policy['inputs'].items():
-                input_entry = {
-                    'type': input_type.split('-')[-1] if '-' in input_type else input_type,
-                    'enabled': input_config['enabled'],
-                }
-                
-                if 'vars' in input_config:
-                    input_entry['vars'] = input_config['vars']
-                    
-                # Convert streams from object to array format which the API expects
-                if 'streams' in input_config:
-                    streams = []
-                    for stream_id, stream_config in input_config['streams'].items():
-                        stream_entry = {
-                            'id': stream_id,
-                            'enabled': stream_config['enabled']
-                        }
-                        if 'vars' in stream_config:
-                            stream_entry['vars'] = stream_config['vars']
-                        streams.append(stream_entry)
-                    input_entry['streams'] = streams
-                
-                inputs.append(input_entry)
-            
-            package_policy['inputs'] = inputs
+
+        # Create package policy
+        package_policy = integration_config.get('package_policy')
+        if not package_policy:
+            print(f"{RED}No 'package_policy' specified in {integration_file}{NC}")
+            return False
+
+        # Add the policy ID to the package policy
+        package_policy_payload = package_policy.copy()
+        package_policy_payload['policy_id'] = policy_id
         
         headers, auth = get_auth_headers()
         url = f"{config['kibana_url']}/api/fleet/package_policies"
         
         if auth:
-            response = requests.post(url, headers=headers, auth=auth, json=package_policy, verify=config['verify_ssl'])
+            response = requests.post(url, headers=headers, auth=auth, json=package_policy_payload, verify=config['verify_ssl'])
         else:
-            response = requests.post(url, headers=headers, json=package_policy, verify=config['verify_ssl'])
+            response = requests.post(url, headers=headers, json=package_policy_payload, verify=config['verify_ssl'])
             
         if response.status_code != 200:
             print(f"{RED}Error installing integration: {response.status_code} {response.text}{NC}")
