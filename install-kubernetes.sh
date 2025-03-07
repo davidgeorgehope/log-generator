@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 # Default values
 ELASTICSEARCH_USER="elastic"
 ELASTICSEARCH_PASSWORD="changeme"
+ELASTICSEARCH_API_KEY=""
 KIBANA_URL="https://nginx-test-2ada07.kb.us-central1.gcp.cloud.es.io"
 ELASTICSEARCH_URL="https://nginx-test-2ada07.es.us-central1.gcp.cloud.es.io"
 FLEET_URL="https://nginx-test-2ada07.fleet.us-central1.gcp.cloud.es.io"
@@ -31,6 +32,7 @@ display_usage() {
   echo -e "\n${BLUE}Options:${NC}"
   echo -e "  --es-user <username>         Elasticsearch username (default: elastic)"
   echo -e "  --es-password <password>     Elasticsearch password (default: changeme)"
+  echo -e "  --es-api-key <api_key>       Elasticsearch API key (alternative to username/password)"
   echo -e "  --kibana-url <url>           Kibana URL (default: https://kibana.example.com)"
   echo -e "  --es-url <url>               Elasticsearch URL (default: https://elasticsearch.example.com)"
   echo -e "  --fleet-url <url>            Fleet URL (default: https://fleet.example.com)"
@@ -42,6 +44,7 @@ display_usage() {
   echo -e "  --help                       Display this help message and exit"
   echo -e "\n${BLUE}Example:${NC}"
   echo -e "  $0 --es-user elastic --es-password mypassword --kibana-url https://kibana.mycompany.com"
+  echo -e "  $0 --es-api-key your-api-key --kibana-url https://kibana.mycompany.com"
   echo -e "\n"
 }
 
@@ -55,6 +58,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --es-password)
       ELASTICSEARCH_PASSWORD="$2"
+      shift 2
+      ;;
+    --es-api-key)
+      ELASTICSEARCH_API_KEY="$2"
       shift 2
       ;;
     --kibana-url)
@@ -114,7 +121,7 @@ if ! command_exists python3; then
 fi
 
 # Make sure the Python script is executable
-SCRIPT_PATH="./install-elastic-agent.py"
+SCRIPT_PATH="./install-elastic-agent-serverless.py"
 if [[ ! -x "$SCRIPT_PATH" ]]; then
   echo -e "${YELLOW}Making Python script executable...${NC}"
   chmod +x "$SCRIPT_PATH"
@@ -125,11 +132,17 @@ PYTHON_ARGS=(
   "--kibana-url" "$KIBANA_URL"
   "--elasticsearch-url" "$ELASTICSEARCH_URL"
   "--fleet-url" "$FLEET_URL"
-  "--username" "$ELASTICSEARCH_USER"
-  "--password" "$ELASTICSEARCH_PASSWORD"
   "--namespace" "$NAMESPACE"
   "--image-tag" "$IMAGE_TAG"
 )
+
+# Add either API key or username/password based on what's provided
+if [[ -n "$ELASTICSEARCH_API_KEY" ]]; then
+  PYTHON_ARGS+=("--api-key" "$ELASTICSEARCH_API_KEY")
+else
+  PYTHON_ARGS+=("--username" "$ELASTICSEARCH_USER")
+  PYTHON_ARGS+=("--password" "$ELASTICSEARCH_PASSWORD")
+fi
 
 if [[ "$SKIP_TOKEN_GENERATION" == "true" ]]; then
   PYTHON_ARGS+=("--skip-token-generation")

@@ -44,6 +44,7 @@ def parse_arguments():
     parser.add_argument('--fleet-url', dest='fleet_url', help='Fleet URL')
     parser.add_argument('--username', dest='username', help='Elasticsearch username')
     parser.add_argument('--password', dest='password', help='Elasticsearch password')
+    parser.add_argument('--api-key', dest='api_key', help='Elasticsearch API key (alternative to username/password)')
     
     # Kubernetes settings
     parser.add_argument('--namespace', dest='namespace', default='default', help='Kubernetes namespace')
@@ -71,6 +72,7 @@ def get_config():
         'elasticsearch_url': args.elasticsearch_url or os.environ.get('ELASTICSEARCH_URL'),
         'elasticsearch_user': args.username or os.environ.get('ELASTICSEARCH_USER'),
         'elasticsearch_password': args.password or os.environ.get('ELASTICSEARCH_PASSWORD'),
+        'elasticsearch_api_key': args.api_key or os.environ.get('ELASTICSEARCH_API_KEY'),
         'fleet_url': args.fleet_url or os.environ.get('FLEET_URL') or args.kibana_url or os.environ.get('KIBANA_URL'),
         'verify_ssl': args.verify_ssl or (os.environ.get('VERIFY_SSL', 'false').lower() == 'true'),
         'max_retries': int(os.environ.get('MAX_RETRIES', '5')),
@@ -90,11 +92,9 @@ def get_config():
         if not config['kibana_url']:
             logger.error("Kibana URL is not set")
             sys.exit(1)
-        if not config['elasticsearch_user']:
-            logger.error("Elasticsearch username is not set")
-            sys.exit(1)
-        if not config['elasticsearch_password']:
-            logger.error("Elasticsearch password is not set")
+        # Check for either username/password or API key
+        if not config['elasticsearch_api_key'] and (not config['elasticsearch_user'] or not config['elasticsearch_password']):
+            logger.error("Either Elasticsearch API key or username and password must be set")
             sys.exit(1)
     
     return config
@@ -210,16 +210,24 @@ def create_elasticsearch_secret():
     # Create new secret
     print(f"\n{BLUE}Creating Elasticsearch credentials secret...{NC}")
     try:
-        result = subprocess.run([
+        command = [
             'kubectl', 'create', 'secret', 'generic', 'elasticsearch-credentials',
             '--namespace', config['namespace'],
-            '--from-literal=ELASTICSEARCH_USER=' + config['elasticsearch_user'],
-            '--from-literal=ELASTICSEARCH_PASSWORD=' + config['elasticsearch_password'],
             '--from-literal=KIBANA_URL=' + config['kibana_url'],
             '--from-literal=ELASTICSEARCH_URL=' + config['elasticsearch_url'],
             '--from-literal=FLEET_URL=' + config['fleet_url'],
-            '--dry-run=client', '-o', 'yaml'
-        ], stdout=subprocess.PIPE, check=True, text=True)
+        ]
+        
+        # Add either API key or username/password
+        if config['elasticsearch_api_key']:
+            command.append('--from-literal=ELASTICSEARCH_API_KEY=' + config['elasticsearch_api_key'])
+        else:
+            command.append('--from-literal=ELASTICSEARCH_USER=' + config['elasticsearch_user'])
+            command.append('--from-literal=ELASTICSEARCH_PASSWORD=' + config['elasticsearch_password'])
+            
+        command.extend(['--dry-run=client', '-o', 'yaml'])
+        
+        result = subprocess.run(command, stdout=subprocess.PIPE, check=True, text=True)
         
         subprocess.run(['kubectl', 'apply', '-f', '-'], input=result.stdout, check=True, text=True)
         
@@ -228,64 +236,69 @@ def create_elasticsearch_secret():
         print(f"{RED}Error creating secret: {str(e)}{NC}")
         sys.exit(1)
 
+def get_auth_headers():
+    """Get authentication headers for Elasticsearch API calls."""
+    headers = HEADERS.copy()
+    
+    if config['elasticsearch_api_key']:
+        headers['Authorization'] = f"ApiKey {config['elasticsearch_api_key']}"
+        return headers, None
+    else:
+        return headers, (config['elasticsearch_user'], config['elasticsearch_password'])
+
 def wait_for_kibana():
     """Wait for Kibana to be available."""
-    if config['skip_token_generation']:
-        return True
-        
+    print(f"\n{BLUE}Waiting for Kibana to be available...{NC}")
+    
+    headers, auth = get_auth_headers()
+    url = f"{config['kibana_url']}/api/status"
+    
     for attempt in range(config['max_retries']):
         try:
-            logger.info(f"Checking if Kibana is available at {config['kibana_url']} (attempt {attempt+1}/{config['max_retries']})")
-            response = requests.get(
-                f"{config['kibana_url']}/api/status",
-                headers=HEADERS,
-                auth=(config['elasticsearch_user'], config['elasticsearch_password']),
-                verify=config['verify_ssl'],
-                timeout=10
-            )
+            if auth:
+                response = requests.get(url, headers=headers, auth=auth, verify=config['verify_ssl'])
+            else:
+                response = requests.get(url, headers=headers, verify=config['verify_ssl'])
+                
             if response.status_code == 200:
-                logger.info("Kibana is available")
+                print(f"{GREEN}Kibana is available!{NC}")
                 return True
-            logger.warning(f"Kibana is not available yet: {response.status_code}")
         except Exception as e:
-            logger.warning(f"Error checking Kibana availability: {str(e)}")
+            debug_log(f"Error connecting to Kibana: {str(e)}")
         
-        logger.info(f"Waiting {config['retry_delay']} seconds before retrying...")
+        print(f"{YELLOW}Waiting for Kibana to be ready (attempt {attempt + 1}/{config['max_retries']})...{NC}")
         time.sleep(config['retry_delay'])
     
-    logger.error(f"Kibana did not become available after {config['max_retries']} attempts")
+    print(f"{RED}Timed out waiting for Kibana to be ready.{NC}")
     return False
 
 def get_agent_policy_id(policy_name):
-    """Retrieve the agent policy ID by name."""
+    """Get the ID of an agent policy by name."""
+    print(f"{BLUE}Looking for agent policy '{policy_name}'...{NC}")
+    
+    headers, auth = get_auth_headers()
     url = f"{config['kibana_url']}/api/fleet/agent_policies"
-    params = {'kuery': f'name:"{policy_name}"'}
     
     try:
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            auth=(config['elasticsearch_user'], config['elasticsearch_password']),
-            params=params,
-            verify=config['verify_ssl'],
-            timeout=10
-        )
-
-        if response.status_code == 200:
-            data = response.json()
-            items = data.get('items', [])
-            for item in items:
-                if item.get('name') == policy_name:
-                    policy_id = item.get('id')
-                    logger.info(f"Found agent policy '{policy_name}' with ID: {policy_id}")
-                    return policy_id
-            logger.info(f"No agent policy found with name '{policy_name}'")
-            return None
+        if auth:
+            response = requests.get(url, headers=headers, auth=auth, verify=config['verify_ssl'])
         else:
-            logger.error(f"Failed to retrieve agent policies: {response.status_code} {response.text}")
+            response = requests.get(url, headers=headers, verify=config['verify_ssl'])
+            
+        if response.status_code != 200:
+            print(f"{RED}Error retrieving agent policies: {response.status_code} {response.text}{NC}")
             return None
+        
+        policies = response.json().get('items', [])
+        for policy in policies:
+            if policy.get('name') == policy_name:
+                print(f"{GREEN}Found agent policy '{policy_name}' with ID: {policy['id']}{NC}")
+                return policy['id']
+        
+        print(f"{YELLOW}Agent policy '{policy_name}' not found{NC}")
+        return None
     except Exception as e:
-        logger.error(f"Error retrieving agent policy: {str(e)}")
+        print(f"{RED}Error retrieving agent policies: {str(e)}{NC}")
         return None
 
 def get_policy_by_client_type(client_type):
@@ -301,170 +314,159 @@ def get_policy_by_client_type(client_type):
         return None
 
 def create_agent_policies(agent_policies_dir, client_type):
-    """Create agent policies from JSON files in the specified directory."""
-    logger.info(f"Creating agent policy for {client_type}")
+    """Create the agent policies from JSON files."""
+    if not os.path.exists(agent_policies_dir):
+        print(f"{RED}Agent policies directory not found: {agent_policies_dir}{NC}")
+        return None
     
-    # Determine the agent policy file based on client type
-    if client_type == 'mysql':
-        agent_policy_file = f"{agent_policies_dir}/mysql-agent-policy.json"
-    elif client_type == 'nginx-frontend':
-        agent_policy_file = f"{agent_policies_dir}/nginx-frontend-agent-policy.json"
-    elif client_type == 'nginx-backend':
-        agent_policy_file = f"{agent_policies_dir}/nginx-backend-agent-policy.json"
-    else:
-        logger.error(f"Unknown client type: {client_type}")
-        return
+    policy_file = os.path.join(agent_policies_dir, f"{client_type}.json")
+    if not os.path.exists(policy_file):
+        print(f"{RED}Policy file not found: {policy_file}{NC}")
+        return None
     
-    # Ensure the file exists
-    if not os.path.exists(agent_policy_file):
-        logger.error(f"Agent policy file does not exist: {agent_policy_file}")
-        return
+    print(f"{BLUE}Creating agent policy from {policy_file}...{NC}")
     
     try:
-        with open(agent_policy_file, 'r') as file:
-            agent_policy_config = json.load(file)
-
-        agent_policy_name = agent_policy_config.get('name')
-        if not agent_policy_name:
-            logger.warning(f"No 'name' field in {agent_policy_file}")
-            return
-
-        agent_policy_id = get_agent_policy_id(agent_policy_name)
-        if agent_policy_id:
-            logger.info(f"Agent policy '{agent_policy_name}' already exists with ID: {agent_policy_id}")
-            return
-
-        # Create a new agent policy
-        agent_policy_url = f"{config['kibana_url']}/api/fleet/agent_policies?sys_monitoring=false"
-        response = requests.post(
-            agent_policy_url,
-            headers=HEADERS,
-            auth=(config['elasticsearch_user'], config['elasticsearch_password']),
-            json=agent_policy_config,
-            verify=config['verify_ssl'],
-            timeout=10
-        )
-
+        with open(policy_file, 'r') as f:
+            policy_data = json.load(f)
+        
+        # Check if policy already exists
+        policy_id = get_agent_policy_id(policy_data['name'])
+        if policy_id:
+            print(f"{YELLOW}Agent policy '{policy_data['name']}' already exists with ID: {policy_id}{NC}")
+            return policy_id
+        
+        headers, auth = get_auth_headers()
+        url = f"{config['kibana_url']}/api/fleet/agent_policies"
+        
+        if auth:
+            response = requests.post(url, headers=headers, auth=auth, json=policy_data, verify=config['verify_ssl'])
+        else:
+            response = requests.post(url, headers=headers, json=policy_data, verify=config['verify_ssl'])
+            
         if response.status_code != 200:
-            logger.error(f"Failed to create agent policy: {response.status_code} - {response.text}")
-            return
-
-        agent_policy_id = response.json()['item']['id']
-        logger.info(f"Created agent policy '{agent_policy_name}' with ID: {agent_policy_id}")
+            print(f"{RED}Error creating agent policy: {response.status_code} {response.text}{NC}")
+            return None
+        
+        policy_id = response.json().get('item', {}).get('id')
+        if policy_id:
+            print(f"{GREEN}Created agent policy '{policy_data['name']}' with ID: {policy_id}{NC}")
+            return policy_id
+        else:
+            print(f"{RED}Failed to create agent policy: Response did not contain a policy ID{NC}")
+            return None
     except Exception as e:
-        logger.error(f"Error processing agent policy file {agent_policy_file}: {str(e)}")
+        print(f"{RED}Error creating agent policy: {str(e)}{NC}")
+        return None
 
 def install_integration(integrations_dir, client_type):
-    """Install the integration for the specific client type."""
-    logger.info(f"Installing integration for client type: {client_type}")
+    """Install the integration for the specified client type."""
+    if not os.path.exists(integrations_dir):
+        print(f"{RED}Integrations directory not found: {integrations_dir}{NC}")
+        return False
     
-    # Map client type to integration file
-    if client_type == 'mysql':
-        integration_file = f"{integrations_dir}/mysql.json"
-    elif client_type == 'nginx-frontend':
-        integration_file = f"{integrations_dir}/nginx-frontend.json"
-    elif client_type == 'nginx-backend':
-        integration_file = f"{integrations_dir}/nginx-backend.json"
-    else:
-        logger.error(f"Unknown client type: {client_type}")
-        return
-    
-    # Ensure the file exists
+    integration_file = os.path.join(integrations_dir, f"{client_type}.json")
     if not os.path.exists(integration_file):
-        logger.error(f"Integration file does not exist: {integration_file}")
-        return
-    
-    try:
-        # Load the package policy configuration from the JSON file
-        with open(integration_file, 'r') as config_file:
-            integration_config = json.load(config_file)
-
-        # Get agent policy name from the config
-        agent_policy_name = integration_config.get('agent_policy_name')
-        if not agent_policy_name:
-            logger.warning(f"No 'agent_policy_name' specified in {integration_file}")
-            return
-
-        # Retrieve the agent policy ID
-        agent_policy_id = get_agent_policy_id(agent_policy_name)
-        if not agent_policy_id:
-            logger.warning(f"Agent policy '{agent_policy_name}' not found for {integration_file}")
-            return
-
-        # Create package policy
-        package_policy = integration_config.get('package_policy')
-        if not package_policy:
-            logger.warning(f"No 'package_policy' specified in {integration_file}")
-            return
-
-        package_policy_payload = package_policy.copy()
-        package_policy_payload['policy_id'] = agent_policy_id  # Assign the agent policy ID
-        package_policy_url = f"{config['kibana_url']}/api/fleet/package_policies"
-
-        response = requests.post(
-            package_policy_url,
-            headers=HEADERS,
-            auth=(config['elasticsearch_user'], config['elasticsearch_password']),
-            json=package_policy_payload,
-            verify=config['verify_ssl'],
-            timeout=10
-        )
-
-        if response.status_code != 200:
-            logger.error(f"Failed to create package policy: {response.status_code} - {response.text}")
-            return
-
-        logger.info(f"Integration from {integration_file} installed successfully.")
-    except Exception as e:
-        logger.error(f"Error processing integration file {integration_file}: {str(e)}")
-
-def generate_enrollment_token(client_type):
-    """Generate an enrollment token for the agent."""
-    logger.info(f"Generating enrollment token for {client_type}")
-    
-    # Get the agent policy name for this client
-    agent_policy_name = get_policy_by_client_type(client_type)
-    if not agent_policy_name:
-        return None
+        print(f"{RED}Integration file not found: {integration_file}{NC}")
+        return False
     
     # Get the agent policy ID
-    agent_policy_id = get_agent_policy_id(agent_policy_name)
-    if not agent_policy_id:
-        logger.error(f"Failed to get agent policy ID for '{agent_policy_name}'")
-        return None
+    policy_id = get_policy_by_client_type(client_type)
+    if not policy_id:
+        print(f"{RED}Failed to get agent policy ID for client type: {client_type}{NC}")
+        return False
+    
+    print(f"{BLUE}Installing integration from {integration_file} to policy ID {policy_id}...{NC}")
     
     try:
-        # Generate enrollment token
-        enrollment_url = f"{config['kibana_url']}/api/fleet/enrollment-api-keys"
-        response = requests.get(
-            enrollment_url,
-            headers=HEADERS,
-            auth=(config['elasticsearch_user'], config['elasticsearch_password']),
-            verify=config['verify_ssl'],
-            timeout=10
-        )
+        with open(integration_file, 'r') as f:
+            integration_data = json.load(f)
         
-        if response.status_code != 200:
-            logger.error(f"Failed to get enrollment API keys: {response.status_code} - {response.text}")
-            return None
+        # Add policy ID to integration data
+        for package in integration_data.get('inputs', []):
+            for input_entry in package.get('streams', []):
+                input_entry['vars']['policy_id'] = policy_id
         
-        # Find the enrollment key for our policy
-        enrollment_keys = response.json().get('items', [])
-        enrollment_key = None
-        for key in enrollment_keys:
-            if key.get('policy_id') == agent_policy_id:
-                enrollment_key = key.get('api_key')
-                break
+        headers, auth = get_auth_headers()
+        url = f"{config['kibana_url']}/api/fleet/package_policies"
         
-        if not enrollment_key:
-            logger.error(f"No enrollment key found for policy ID {agent_policy_id}")
-            return None
+        if auth:
+            response = requests.post(url, headers=headers, auth=auth, json=integration_data, verify=config['verify_ssl'])
+        else:
+            response = requests.post(url, headers=headers, json=integration_data, verify=config['verify_ssl'])
             
-        logger.info(f"Successfully generated enrollment token for {client_type}")
-        return enrollment_key
+        if response.status_code != 200:
+            print(f"{RED}Error installing integration: {response.status_code} {response.text}{NC}")
+            return False
+        
+        print(f"{GREEN}Integration installed successfully!{NC}")
+        return True
+    except Exception as e:
+        print(f"{RED}Error installing integration: {str(e)}{NC}")
+        return False
+
+def generate_enrollment_token(client_type):
+    """Generate an enrollment token for a specific client type."""
+    # Get the agent policy ID
+    policy_id = get_policy_by_client_type(client_type)
+    if not policy_id:
+        logger.error(f"Failed to get agent policy ID for client type: {client_type}")
+        if config['force_skip_token']:
+            return None
+        sys.exit(1)
+    
+    logger.info(f"Generating enrollment token for policy ID: {policy_id}")
+    
+    headers, auth = get_auth_headers()
+    url = f"{config['kibana_url']}/api/fleet/enrollment_api_keys"
+    
+    try:
+        # 1. First get the list of existing tokens to check if one exists for this policy
+        if auth:
+            response = requests.get(url, headers=headers, auth=auth, verify=config['verify_ssl'])
+        else:
+            response = requests.get(url, headers=headers, verify=config['verify_ssl'])
+            
+        if response.status_code != 200:
+            logger.error(f"Error retrieving enrollment tokens: {response.status_code} {response.text}")
+            if config['force_skip_token']:
+                return None
+            sys.exit(1)
+        
+        # Check for existing token
+        existing_tokens = response.json().get('list', [])
+        for token in existing_tokens:
+            if token.get('policy_id') == policy_id:
+                logger.info(f"Found existing enrollment token for policy ID {policy_id}")
+                return token.get('api_key')
+        
+        # 2. Create a new token if one doesn't exist
+        create_data = {"policy_id": policy_id}
+        if auth:
+            response = requests.post(url, headers=headers, auth=auth, json=create_data, verify=config['verify_ssl'])
+        else:
+            response = requests.post(url, headers=headers, json=create_data, verify=config['verify_ssl'])
+            
+        if response.status_code != 200:
+            logger.error(f"Error creating enrollment token: {response.status_code} {response.text}")
+            if config['force_skip_token']:
+                return None
+            sys.exit(1)
+        
+        api_key = response.json().get('item', {}).get('api_key')
+        if not api_key:
+            logger.error("API key not found in response")
+            if config['force_skip_token']:
+                return None
+            sys.exit(1)
+        
+        logger.info(f"Successfully generated enrollment token for policy ID: {policy_id}")
+        return api_key
     except Exception as e:
         logger.error(f"Error generating enrollment token: {str(e)}")
-        return None
+        if config['force_skip_token']:
+            return None
+        sys.exit(1)
 
 def create_enrollment_tokens_configmap():
     """Generate tokens for each client type and store in a ConfigMap."""
